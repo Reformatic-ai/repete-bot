@@ -125,7 +125,7 @@
       "key": "METHOD NOTE 2",
       "heading": "## METHOD NOTE 2 — the OOS window is contaminated (2026-07-23)",
       "start_line": 302,
-      "body_sha256": "c07292f756e28465ed92ee9ad9d33907804e32480e26398270c894180882c1f4",
+      "body_sha256": "f9543f1586088705b8bd487238b5499b946b661b453860e668c4d14853adc63d",
       "subheadings": [],
       "specs": [],
       "spec_source": "no registration"
@@ -1274,6 +1274,17 @@
         "### Accounting"
       ],
       "specs": [],
+      "spec_source": "id+header+trailer"
+    },
+    {
+      "key": "§81",
+      "heading": "## §81 — TRAIL ma_crossover / WIDEN THE meanrev STOP: 0 OF 2 CLEAR, ONE IS DIRECTIONALLY BETTER (DIAGNOSTIC, K stays closed at 16, pre-registered 2026-11-02)",
+      "start_line": 7558,
+      "body_sha256": "03e05a504799c10bf88d1ec8a39145152a1e7010da5703ad3796cb5212cd0249",
+      "subheadings": [],
+      "specs": [
+        "s81a"
+      ],
       "spec_source": "id+header+trailer"
     }
   ]

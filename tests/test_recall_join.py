@@ -13,8 +13,9 @@ import recall
 def test_every_registration_joins_to_a_section():
     joined = recall.join()
     # 55 at P13; 63 after s62a-h (Phase 15, 2026-08-11); 98 after s72
-    # (2026-08-12); 102 after s73a-d (2026-08-12).
-    assert len(joined) == 106, (
+    # (2026-08-12); 102 after s73a-d (2026-08-12); 107 after s81a
+    # (2026-11-02).
+    assert len(joined) == 107, (
         "the join must cover every registration; if this number moved, a spec "
         "was registered and this test is the record of what the count was")
     keys = {s["key"] for s in recall.sections()}

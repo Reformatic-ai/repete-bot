@@ -317,7 +317,7 @@ Consequences, binding on all future work:
    with it: with N prior comparisons, a marginal pass is more likely to be luck
    than edge. Prefer candidates that pass by a clear margin.
 
-Trial count through §75: 241 arm runs — from `research/verdicts.jsonl`, checked
+Trial count through §81: 244 arm runs — from `research/verdicts.jsonl`, checked
 by `tests/test_trial_count.py`, printed by `scripts/trial_report.py`. This line
 was last hand-typed as "through §11: ~11" and then left for sixty-two
 sections; it is now the one the guard reads, so it cannot drift again.
@@ -7554,3 +7554,55 @@ live's once-per-cycle rail equity can sit a cycle's close costs behind.
 Trial count through §80: 241 arm runs. §80 records no arms; K is closed at 16.
 
 <!-- recall: section=§80 specs= -->
+
+## §81 — TRAIL ma_crossover / WIDEN THE meanrev STOP: 0 OF 2 CLEAR, ONE IS DIRECTIONALLY BETTER (DIAGNOSTIC, K stays closed at 16, pre-registered 2026-11-02)
+
+**Spec `s81a`, registered and run once on 2026-11-02, report only.** The owner's
+2026-11-02 plan (workstream A) asked for one pre-registered, after-cost test of
+two exit changes, with the live config left alone and the numbers going to him.
+The prior, the four clauses and the reading rule are in the spec and were frozen
+before the run.
+
+**Baseline is the live setup** as of branch `sector-map-fix` (127f12d): the same
+commit that maps all 38 core names to a sector, so the 3-per-sector cap now
+binds in the simulator too (`sector_concentration` refused 759 of 6,143 baseline
+signals). Judge OFF — the calibration refuses (§80). After cost: the live
+equities block, sha `97147170b54b8105…`, the same as §80. Venue: §43d's wide
+2022-01-01..2026-07-24 snapshot, entries limited to the 38 core names.
+
+| arm | return | PF | maxDD | trades | win rate | cost paid | (a) n≥30 | (b) PF > live | (c) maxDD ≤ live+1pp | (d) paired, K=16 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| baseline (live) | +121.77% | 1.755 | 9.88% | 916 | 44.5% | $1,822 | | | | |
+| trail_ma | **+140.39%** | **1.794** | **9.58%** | 1,002 | 46.0% | $1,999 | PASS | PASS | PASS | FAIL |
+| meanrev_wide_stop | +111.80% | 1.723 | 9.06% | 901 | 44.7% | $1,789 | PASS | **FAIL** | PASS | FAIL |
+
+(d) in detail: trail_ma +$7.17/trade over baseline, 99.69% CI [−$40.80,
++$55.57], 626 shared trades (48% common); meanrev_wide_stop −$8.85/trade, CI
+[−$52.25, +$39.66], 653 shared (56%). Both INCONCLUSIVE.
+
+**Reading, by the rule frozen in the spec:**
+
+- **trail_ma — "directionally better, not distinguishable from noise".** It
+  clears (a)–(c) and fails only (d). That is NOT a reason to switch on its own.
+  The mechanism the prior named did show up: heat refusals fell from 379 to 80,
+  because a raised stop shrinks the open stop-risk, and the arm took 86 more
+  trades. Stop-loss exits rose 580 → 701 as the trail converted some
+  `strategy_sell` exits (321 → 287) into earlier stop exits.
+- **meanrev_wide_stop — "no better than live".** PF fell (1.723 vs 1.755) and
+  return fell by 10pp. The prior was WRONG about drawdown: it predicted maxDD
+  would rise through heat; it fell 0.82pp. Heat refusals barely moved
+  (379 → 395). One width only; per the spec, a real follow-up would be a new
+  registration over a monotone sequence of widths, not 3.0.
+
+**Prior scorecard.** Right: (d) fails both; (a) passes both; trail_ma's PF
+within ±0.10 (+0.039), its maxDD lower, its entry count up via heat. Wrong:
+meanrev_wide_stop's maxDD direction.
+
+**What this does not say.** Judge off (live passes ~37% of signal exposure,
+§79), survivor-selected names, one venue (one bear year, three up years). It is
+not evidence about the live record's own 34 days, and DIAGNOSTIC licenses no
+config change. Neither arm is applied; the owner decides.
+
+Trial count through §81: 244 arm runs (241 + 3). K is closed at 16.
+
+<!-- recall: section=§81 specs=s81a -->

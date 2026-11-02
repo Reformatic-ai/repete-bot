@@ -1,0 +1,162 @@
+# §81a — DIAGNOSTIC: two exit changes on the live ensemble, after cost
+#         (2022-2026)
+#
+# WHY NOW. The 2026-11-02 survey of the live record (owner's plan, workstream
+# A: "make the trading bots better") found two exit-side leaks:
+#   (a) ma_crossover holds 11 of the 14 open winners and has NO trailing stop —
+#       `risk.brackets.trailing_strategies` is [tsmom] only (§7 adopted the
+#       chandelier trail for tsmom alone). Its winners can hand back everything
+#       down to the fixed entry stop before SMA10 crosses back under SMA30.
+#   (b) meanrev's own exits won 20 of 23, while all 5 of its stop-outs lost. It
+#       uses the global 2.0 x ATR bracket stop; a dip-buyer's stop that close to
+#       entry may be cutting trades the strategy's own 5-day exit would rescue.
+# Both are read from 34 days of live paper trading — a hint, not evidence. This
+# asks the simulator.
+#
+# REPORT ONLY. DIAGNOSTIC decides nothing and licenses nothing (run_gate.py).
+# The live config is NOT switched to either arm; the numbers go to the owner,
+# and any switch is his decision (2026-11-02 plan: "A strategy switch coming out
+# of any test comes back to him with the numbers first").
+#
+# THE BASELINE IS THE LIVE SETUP. `baseline` sets nothing: it is config.yaml as
+# of this branch (sector-map fix 127f12d — every core name now counts toward
+# the 3-per-sector cap, in the simulator too, because pure_checks is shared).
+# config.yaml is not in the spec hash; the run's checkout is named in the §81
+# write-up.
+#
+# VENUE. §43d's and §80's snapshot, the most recent the repo has: wide 500-name
+# 2022-01-01..2026-07-24. The ensemble only ENTERS the 38 core names
+# (backtest.py `in_universe`), so this is the live universe on recent data. §80
+# re-scored exactly this cell after cost (969 trades), so the venue is known to
+# produce a decidable sample on the live shape.
+#
+# JUDGE OFF — not a choice of convenience. §80: the judge calibration REFUSES
+# (context_version 3, refit pending since the judge moved to the local model,
+# §78), so a judge-on run cannot be scored. Both arms and the baseline are
+# judge-less alike, so the COMPARISON holds; the absolute levels describe a bot
+# that does not exist (live, the judge cuts most buys — §79: ~37% of signal
+# exposure gets through).
+#
+# AFTER COST. `operator_costs` below is the live console's equities block
+# (memory/operator_settings.json, version 4, 2026-10-28), equal to
+# cost_models.RECOMMENDED: US$0.005/share, US$1.00 minimum, 1% maximum. Every
+# simulated fill pays it, on all three arms.
+#
+# K. Closed at 16 (§77, §80). DIAGNOSTIC spends none; the paired clause uses 16
+# because that is the programme's family-wise count, as s73 did.
+id: s81a
+claim: DIAGNOSTIC
+title: "Trail ma_crossover / widen the meanrev stop, vs the live ensemble, after cost (2022-2026)"
+
+judge_model: false
+
+operator_costs:
+  equities: {model: per_share, flat_per_order: 1.0, per_share: 0.005,
+             min_per_order: 1.0, max_pct_of_value: 1.0}
+  options:  {model: per_contract, flat_per_order: 1.4, per_contract: 0.65,
+             fees_per_contract: 0.025, min_per_order: 1.0}
+  fx:       {model: per_10k_units, flat_per_order: 1.0, per_10k_units: 1.0,
+             spread_pips: 0.2}
+  crypto:   {model: percent, flat_per_order: 1.0, pct_of_value: 0.8}
+
+snapshot:
+  path: data/snapshots/bars_wide_2022-01-01_2026-07-24.json.gz
+  sha256: 081dc08727a8cd8e1dc4726625b1fab02cb3b7d8c1489849a69327950c4adc8d
+
+cash: 100000.0
+
+bonferroni_k: 16
+
+arms:
+  - name: baseline
+  # (a) The chandelier trail, exactly as tsmom runs it (risk.trail_stop:
+  #     high-water since entry - trailing_atr_mult 3.0 x ATR14, ratchets up
+  #     only), extended to ma_crossover. No new parameter.
+  - name: trail_ma
+    set:
+      risk.brackets.trailing_strategies: [tsmom, ma_crossover]
+  # (b) meanrev's own bracket stop at 3.0 x ATR instead of the global 2.0
+  #     (risk._own_stop_mult, the per-strategy key swing_sectors added). ONE
+  #     value, chosen before the run as 1.5x the current width — not a grid,
+  #     so there is nothing to pick a winner from afterwards.
+  - name: meanrev_wide_stop
+    set:
+      strategies.meanrev.stop_atr_mult: 3.0
+
+# Each arm is scored against `baseline` on the same four clauses. `family`
+# records "both must clear" as run_gate does; the report to the owner gives
+# each arm's own line, and an arm CLEARS only when all four of ITS clauses pass.
+family: [trail_ma, meanrev_wide_stop]
+
+clauses:
+  # Enough closed trades that (b)-(d) are not read off a handful.
+  - {id: a, rule: min_trades, n: 30}
+  # The arm makes more per unit lost than the live setup, after cost.
+  - {id: b, rule: pf_gt_baseline}
+  # And does not buy that with a deeper hole: maxDD within 1pp of live's.
+  - {id: c, rule: maxdd_within, pp: 1.0}
+  # The improvement is not noise: paired on common trades (§55), K=16.
+  - {id: d, rule: significantly_better_paired}
+
+prior: >-
+  I EXPECT BOTH ARMS TO FAIL, AND I NAME THE CLAUSE: (d). At K=16 the paired
+  test needs a large, consistent per-trade improvement, and an exit rule
+  touches only the trades whose path crosses it. s73's macro gate, a cleaner
+  subset-of-trades question on the same instrument, failed (b) in 4 of 4.
+  Expected verdict: FAILS on both, with (a) passing on both.
+
+  (a) trail_ma. A 3-ATR chandelier exits a trend follower EARLIER than its own
+  SMA10/SMA30 cross-down in most trends that stall, and LATER never (it only
+  adds an exit). So: fewer giveback losses, also shorter winners. I expect PF
+  within +/-0.10 of baseline and maxDD slightly LOWER (c passes). (b) is a
+  coin flip and I will not pretend otherwise. Second-order effect named in
+  advance: a raised stop shrinks the position's open stop-risk, which frees
+  portfolio-heat budget (4% cap), so trail_ma may take MORE entries than
+  baseline — a trade-count rise in this arm is that mechanism, not noise.
+
+  (b) meanrev_wide_stop. meanrev sizes by stop distance at 5% risk, but
+  max_position_pct (10%) binds first for almost every name, so a wider stop
+  does NOT shrink the position: it raises the dollars at risk per trade by
+  ~1.5x and each trade's heat by the same. Under the 4% heat cap that means
+  FEWER concurrent positions for the whole ensemble, not just meanrev. I
+  expect meanrev's own stop-outs to fall and its win rate to rise, but the
+  ensemble's PF to move little and its maxDD to RISE. Prediction: (c) is the
+  clause most likely to fail on this arm after (d).
+
+  READING RULE, frozen before the run. An arm that clears all four is reported
+  to the owner as "better than live on this venue, after cost, judge off" —
+  still DIAGNOSTIC: it licenses no config change by itself; the owner decides.
+  An arm that clears (b) and (c) but not (d) is reported as "directionally
+  better, not distinguishable from noise" and is NOT a reason to switch. An
+  arm failing (b) or (c) is reported as "no better than live" for this
+  question. Neither result is evidence about the live record's own 34 days.
+  The verdict row and every arm are appended; nothing is re-run.
+
+failure_modes:
+  - >-
+    JUDGE OFF. Live, the judge passes about 37% of signal exposure (§79). An
+    exit rule's value depends on WHICH entries exist, and a judge-less book
+    holds roughly 2.7x as much. The comparison is like-for-like across arms;
+    the absolute returns are not the live bot's.
+  - >-
+    SURVIVORSHIP. The 38 names are in config.yaml because they are today's
+    large caps (§48, §51). Both arms and the baseline carry it equally, so it
+    biases levels more than the difference — but a trend-following exit
+    measured on survivors is measured on trends that kept going.
+  - >-
+    ONE VENUE, ONE REGIME SET. 2022-2026 is one bear year and three up years.
+    No second period is run; a result here does not generalise to a sideways
+    market, and this spec does not claim it does.
+  - >-
+    THE SECTOR CAP IS NEW IN THE BASELINE. This is the first run with all 38
+    names mapped. Both arms carry it, so it does not bias the comparison, but
+    the baseline here is NOT §80's scratch row and the two must not be
+    compared as if it were.
+  - >-
+    ONE meanrev WIDTH. 3.0 is a single pre-chosen value. If (b) shows a real
+    effect, the right next step is a NEW registration testing a monotone
+    sequence of widths (§55's no_interior_optimum), not adopting 3.0.
+  - >-
+    The trail on a SHORT is unimplemented (backtest.py raises). ma_crossover is
+    long-only in config, so this cannot fire here; if it did, the run aborts
+    rather than mis-scores.
