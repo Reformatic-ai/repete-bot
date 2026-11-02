@@ -190,16 +190,19 @@ def test_book_exposure_resolves_a_sector_from_the_real_config():
 
 def test_an_unmapped_symbol_is_absent_not_a_sector_named_none():
     """`sector_map`'s own docstring: a symbol in no sector is ABSENT, not in a
-    sector called None — that is what keeps the sector rails inert for the
-    core universe instead of lumping 38 names into one pseudo-sector."""
+    sector called None — so unmapped names are never lumped into one
+    pseudo-sector. Since 2026-11-02 every core name is mapped (SPY is "Broad
+    market"), so this uses DELL, a news nomination outside the core list."""
     import os
 
     import yaml
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     cfg = yaml.safe_load(open(os.path.join(root, "config.yaml")))
 
-    _, detail = research._book_exposure("SPY", {}, cfg)
+    _, detail = research._book_exposure("DELL", {}, cfg)
     assert detail["sector"] is None
+    _, spy = research._book_exposure("SPY", {}, cfg)
+    assert spy["sector"] == "Broad market"
 
 
 def test_the_news_finding_reads_the_field_news_memory_ACTUALLY_writes(monkeypatch):

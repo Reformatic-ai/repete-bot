@@ -1756,11 +1756,11 @@ def pure_checks(action: str, symbol: str, qty: int, price: float,
     if action in ENTRY_ACTIONS and scfg.get("enabled"):
         cap = scfg.get("max_per_sector")
         sector = sector_of(cfg, symbol)
-        # An UNMAPPED symbol is unconstrained. The core universe carries no
-        # sector map, so this rail is inert for every pre-existing strategy —
-        # which is why it can be added without re-gating any of them. Treating
-        # "no sector" as a sector would instead lump all 38 core names together
-        # under one cap and silently throttle the whole ensemble.
+        # An UNMAPPED symbol is unconstrained. Since 2026-11-02 every core name
+        # is mapped (`sectors:` + `core_sectors:`), so this binds on the whole
+        # core book; what stays unmapped is a news nomination outside it.
+        # Treating "no sector" as a sector would instead lump every unmapped
+        # name together under one cap.
         if cap and sector is not None:
             n = sector_open_count(cfg, symbol, positions)
             if n >= cap:

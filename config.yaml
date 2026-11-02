@@ -141,6 +141,46 @@ sectors:
   Communication Services: [DIS, CMCSA, T, VZ, EA, TTWO, MTCH, OMC, SIRI]
 
 # ============================================================
+# CORE SECTORS — the rest of `symbols:`, read by the sector cap ONLY.
+# ============================================================
+# `risk.sector_concentration` counts open positions per sector through
+# `strategies.base.sector_map`, which reads `sectors:` above. 23 of the 38 core
+# names are in it (they happen to rank into reclaim's list); the other 15 were
+# not, and an unmapped symbol counts toward nobody's cap. So the cap never saw
+# AVGO, QQQ or XLK: on 2026-10-09..14 the book bought AVGO/NVDA/AMD/QQQ/XLK,
+# all five stopped out on 10-15/16 for -$1,527, more than the bot's whole
+# realized loss to date.
+#
+# NOT merged into `sectors:`, for two reasons:
+#   1. `sectors:` is reclaim's FROZEN universe (the top-12-by-dollar-volume rule
+#      above). Adding AVGO/CRM/META/... there widens a strategy's universe and
+#      changes what its registered gates reproduce.
+#   2. Preflight refuses a sector fund (XLK, XLF, XLE, XLV) inside `sectors:`,
+#      because reclaim would rank a basket as a peer of its own constituents
+#      (§49). The cap has no such problem: XLK held beside NVDA and AMD IS a
+#      third tech bet, which is exactly what it should count.
+# `sector_map` merges this block with `sectors:`; reclaim, `sector_universe`
+# and the sector_etfs check read `sectors:` alone, so neither moves.
+#
+# Sector names are `sectors:` names, so a fund lands in the same bucket as its
+# constituents. "Broad market" is new: SPY, DIA, IWM have no single sector.
+# With max_per_sector 3 a three-name bucket can never bind on its own; it is
+# here so they are mapped, not to cap them.
+#
+# Owner-approved assignment, 2026-11-02 plan (workstream A). A symbol in both
+# maps, or twice here, is a preflight failure (ambiguous membership makes the
+# cap evadable). tests/test_sector_coverage.py fails when any symbol an
+# enabled strategy may enter has no sector.
+core_sectors:
+  Technology:             [AVGO, CRM, QQQ, XLK]
+  Communication Services: [META, GOOGL]
+  Consumer Cyclical:      [TSLA]
+  Financial Services:     [V, XLF]
+  Healthcare:             [ABBV, XLV]
+  Energy:                 [XLE]
+  Broad market:           [SPY, DIA, IWM]
+
+# ============================================================
 # SECTOR FUNDS — the `sector_etfs` universe, used by `swing_sectors` ONLY.
 # ============================================================
 # The 11 SPDR sector funds, one per GICS sector. Same design as the sector
@@ -813,7 +853,8 @@ risk:                  # ---- HARD RAILS: enforced in deterministic code ----
                                  # values above are UNCHANGED; only the P&L basis moved.
   sector_concentration:          # SECTOR CONCENTRATION CAP (2026-08-05, with `reclaim`).
     enabled: true                # At most `max_per_sector` open positions whose
-    max_per_sector: 3            # symbol appears in the same `sectors:` entry.
+    max_per_sector: 3            # symbol appears in the same `sectors:` or
+                                 # `core_sectors:` entry (one name per sector).
                                  # ENTRIES only; exits are never blocked.
                                  #
                                  # `reclaim` hunts one sector at a time by
@@ -827,10 +868,12 @@ risk:                  # ---- HARD RAILS: enforced in deterministic code ----
                                  # miss a sector that has only just started
                                  # moving together).
                                  #
-                                 # A symbol in NO sector is unconstrained here —
-                                 # the core universe is not sector-mapped, so
-                                 # this rail is inert for every existing
-                                 # strategy and cannot change their behaviour.
+                                 # A symbol in NO sector is unconstrained here.
+                                 # Until 2026-11-02 that was 15 of the 38 core
+                                 # names (AVGO, QQQ, XLK, ...), so the cap
+                                 # missed the Oct 9-14 tech cluster;
+                                 # `core_sectors:` now maps all 38, and the cap
+                                 # binds on ma_crossover/tsmom/meanrev too.
                                  #
                                  # 3 is PRE-REGISTERED, not fitted: it is the
                                  # top of the owner's stated 2-3 range. Which of

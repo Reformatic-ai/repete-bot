@@ -99,22 +99,25 @@ def side_of_qty(qty) -> str | None:
 
 
 def sector_map(cfg: dict) -> dict:
-    """`symbol -> sector name`, inverted from config's frozen `sectors:` block.
+    """`symbol -> sector name`, inverted from config's frozen `sectors:` block
+    plus `core_sectors:` (the core names `sectors:` leaves out, 2026-11-02).
 
-    Lives here, in the dependency-free base module, because BOTH `risk.py` (the
-    sector-concentration rail) and `strategies/reclaim.py` (sector ranking) need
-    it, and a strategy must never import `risk`. `risk.py` already imports
-    ENTRY_ACTIONS/EXIT_ACTIONS from this module, so the direction is established.
+    Lives here, in the dependency-free base module, because `risk.py` (the
+    sector-concentration rail) needs it and a strategy must never import
+    `risk`. `risk.py` already imports ENTRY_ACTIONS/EXIT_ACTIONS from this
+    module, so the direction is established. `reclaim` reads `sectors:` itself
+    and never sees `core_sectors:`, so its universe and ranking are unchanged.
 
     A symbol in no sector is simply ABSENT from the result — callers treat that
-    as "unmapped", not as a sector named None. That is what keeps every
-    sector-keyed rail inert for the core universe, instead of lumping all 38
-    core names into one giant pseudo-sector and capping them collectively.
+    as "unmapped", not as a sector named None, so a name nobody mapped (a news
+    nomination outside the core universe) is never lumped into a pseudo-sector
+    with every other unmapped name and capped collectively.
     """
     out: dict = {}
-    for sector, syms in (cfg.get("sectors") or {}).items():
-        for s in (syms or ()):
-            out[s] = sector
+    for block in ("sectors", "core_sectors"):
+        for sector, syms in (cfg.get(block) or {}).items():
+            for s in (syms or ()):
+                out[s] = sector
     return out
 
 

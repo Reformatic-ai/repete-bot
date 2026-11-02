@@ -367,24 +367,28 @@ def run(cfg: dict) -> list[str]:
     # here: a malformed map does not raise, it quietly changes which names a
     # strategy may buy and how many of them the concentration cap allows.
     # Preflight's polarity is fail-safe, so each is a refusal to start.
-    sectors = cfg.get("sectors")
-    if sectors is not None:
+    # `core_sectors:` (2026-11-02) feeds the same `sector_map`, so `seen` spans
+    # both blocks: a name in each is as ambiguous as a name twice in one.
+    seen: dict = {}
+    for block in ("sectors", "core_sectors"):
+        sectors = cfg.get(block)
+        if sectors is None:
+            continue
         if not isinstance(sectors, dict):
-            fails.append("sectors must be a mapping of sector name -> symbol list")
-        else:
-            seen: dict = {}
-            for sector, syms in sectors.items():
-                if not isinstance(syms, list) or not syms:
-                    fails.append(f"sectors.{sector} must be a non-empty list")
-                    continue
-                for s in syms:
-                    if s in seen:
-                        # Ambiguous membership makes risk.sector_open_count
-                        # answer differently depending on which lookup wins, so
-                        # the concentration cap becomes evadable by construction.
-                        fails.append(f"symbol {s} appears in two sectors "
-                                     f"({seen[s]} and {sector})")
-                    seen[s] = sector
+            fails.append(f"{block} must be a mapping of sector name -> symbol list")
+            continue
+        for sector, syms in sectors.items():
+            if not isinstance(syms, list) or not syms:
+                fails.append(f"{block}.{sector} must be a non-empty list")
+                continue
+            for s in syms:
+                if s in seen:
+                    # Ambiguous membership makes risk.sector_open_count
+                    # answer differently depending on which lookup wins, so
+                    # the concentration cap becomes evadable by construction.
+                    fails.append(f"symbol {s} appears in two sectors "
+                                 f"({seen[s]} and {sector})")
+                seen[s] = sector
 
     # ---- the ETF list, and the strategies that subtract it ----
     #
