@@ -223,10 +223,10 @@ def test_both_benchmarks_pay_the_same_model(pair):
 def test_the_summary_stamps_the_block_and_what_it_paid(pair):
     _, on = pair
     s = on.summary()
-    assert s["operator_costs"] == cost_models.validate(RESEARCH)
+    assert s["operator_costs"] == bt.charged_form(cost_models.validate(RESEARCH))
     assert s["operator_cost_paid_usd"] == on.operator_cost_paid_usd
     assert s["operator_costs_sha256"] == bt.operator_costs_sha256(
-        cost_models.validate(RESEARCH))
+        bt.charged_form(cost_models.validate(RESEARCH)))
 
 
 def test_the_single_strategy_path_charges_too(cfg, bars):
@@ -381,3 +381,57 @@ def test_the_verdict_records_the_block_its_hash_and_what_each_arm_paid():
     assert 'rec[SUMMARY].get("operator_cost_paid_usd", 0.0)' in src
     # Pinned onto the config BEFORE any arm runs.
     assert src.index("apply_operator_costs(") < src.index("run_arms(spec, base_cfg")
+
+
+# ---------------------------------------- the 2026-11-03 cost-model copy (§82)
+#
+# The console's costs.py gained an optional `fx_conversion_pct` per US-dollar
+# market and a per-bot `entry_filter`, and validate() now writes both out. A
+# frozen spec's block predates them, so these pin that it still validates, still
+# hashes and stamps exactly as it did, and that the new fields do what they say.
+
+# The research block written out the way every spec frozen before 2026-11-03
+# writes it: no fx_conversion_pct, no entry_filter.
+OLD_SHAPE = {m: {k: v for k, v in RESEARCH[m].items() if k != "fx_conversion_pct"}
+             for m in RESEARCH}
+RESEARCH_SHA = "97147170b54b8105fc04a37113a2048ce28ddde03d39f104d8bc236b12ccb18f"
+
+
+def test_a_block_frozen_before_the_conversion_field_still_validates():
+    gs.validate(_spec(operator_costs=OLD_SHAPE))
+
+
+def test_the_research_block_keeps_the_sha_its_verdicts_carry():
+    """§80 and §81 cite 97147170b54b8105...; a re-run must stamp the same."""
+    for block in (OLD_SHAPE, RESEARCH):
+        got = bt.operator_costs_block({"backtest": {"operator_costs": block}})
+        assert bt.operator_costs_sha256(got) == RESEARCH_SHA
+        assert "entry_filter" not in got
+        assert all("fx_conversion_pct" not in got[m] for m in cost_models.MARKETS)
+
+
+def test_a_conversion_is_charged_and_moves_the_sha():
+    conv = {m: dict(v) for m, v in RESEARCH.items()}
+    conv["equities"]["fx_conversion_pct"] = 1.5
+    got = bt.operator_costs_block({"backtest": {"operator_costs": conv}})
+    assert got["equities"]["fx_conversion_pct"] == 1.5
+    assert bt.operator_costs_sha256(got) != RESEARCH_SHA
+    # 100 shares at $50: US$1.00 commission + 1.5% of US$5,000 = US$76.00.
+    assert bt.operator_charge(got, 100, 50.0) == pytest.approx(76.0)
+    plain = bt.operator_costs_block({"backtest": {"operator_costs": RESEARCH}})
+    assert bt.operator_charge(plain, 100, 50.0) == pytest.approx(1.0)
+
+
+def test_a_spec_cannot_declare_the_live_only_entry_filter():
+    """The simulator does not model the entry cost filter (divergence #27)."""
+    with_filter = {m: dict(v) for m, v in RESEARCH.items()}
+    with_filter["entry_filter"] = {"repete": {"on": False, "multiple": 1.0}}
+    with pytest.raises(gs.SpecError, match="entry_filter"):
+        gs.validate(_spec(operator_costs=with_filter))
+
+
+def test_a_typo_beside_the_new_field_is_still_refused():
+    padded = {m: dict(v) for m, v in OLD_SHAPE.items()}
+    padded["equities"]["fx_conversion_pc"] = 1.5          # a typo validate drops
+    with pytest.raises(gs.SpecError, match="drop"):
+        gs.validate(_spec(operator_costs=padded))

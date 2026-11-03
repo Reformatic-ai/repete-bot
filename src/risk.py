@@ -1796,6 +1796,12 @@ PURE_RAILS = ("zero_qty", "order_value_cap", "drawdown", "max_open_positions",
 #   downsize_zero_qty   happens AFTER the judge shrinks an order, so it cannot
 #                       exist at census time — the census runs on the signal's
 #                       qty, not the judged one.
+#   cost_filter         the entry cost filter (§82, 2026-11-03, off by
+#                       default). Needs the CLOSED-TRADE HISTORY (its edge is
+#                       the strategy's own track record) and the operator's
+#                       settings file, and runs on the judged qty, after the
+#                       drift guard. Live only: the simulator does not model it
+#                       (divergence #27).
 #
 # Named rather than merely absent so a new rail added outside cannot silently
 # look covered — test_block_census.py asserts this partition is exhaustive
@@ -1803,7 +1809,8 @@ PURE_RAILS = ("zero_qty", "order_value_cap", "drawdown", "max_open_positions",
 # found `entry_drift` and `downsize_zero_qty`: both had been live-path rails
 # for months, registered nowhere, and invisible to every partition check.
 NON_PURE_RAILS = ("halt", "daily_cap", "heat", "correlation", "swing_guard",
-                  "live_kill", "entry_drift", "downsize_zero_qty")
+                  "live_kill", "entry_drift", "downsize_zero_qty",
+                  "cost_filter")
 
 
 def rail_census(action: str, symbol: str, qty: int, price: float,

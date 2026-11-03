@@ -86,6 +86,8 @@ FEE_MAX = 1000.0
 # This bot trades US equities in USD on Alpaca paper.
 MARKET = "equities"
 CURRENCY = "USD"
+# This bot's key in the console's per-bot settings (`costs.entry_filter`).
+BOT = "repete"
 
 # Where the settings in effect for this cycle ride along inside the cycle's cfg dict
 # (as a plain dict, so cfg stays JSON-serialisable). Set by main._bootstrap_cycle.
@@ -145,11 +147,20 @@ class OperatorSettings:
         order, at most 1% of its value", or "no cost"."""
         return cost_models.describe(self.costs, market or MARKET)
 
+    def entry_filter(self) -> dict:
+        """This bot's entry cost filter, {"on", "multiple"} (§82, 2026-11-03):
+        off with a multiple of 1 unless the console saved it on."""
+        return cost_models.entry_filter(self.costs, BOT)
+
     def summary(self) -> str:
-        """One line for logs and the ledger."""
+        """One line for logs and the ledger. The entry filter is named only when
+        it is on, so a cycle with it off writes the same line as before."""
         s = (f"v{self.version} schema={self.schema} "
              f"{MARKET} cost=({self.describe()}) "
              f"frequency={self.frequency}")
+        flt = self.entry_filter()
+        if flt.get("on"):
+            s += f" entry_filter=on x{float(flt['multiple']):g}"
         return s + (f" | problem: {self.problem}" if self.problem else "")
 
 

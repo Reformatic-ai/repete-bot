@@ -126,6 +126,16 @@ src/operator_settings.py Operator settings from the Reformatic console (2026-10-
                  config.yaml's values untouched. Missing/bad file = every market off,
                  medium; reported in health.py's `operator_settings`, never as a
                  problem.
+src/cost_filter.py Entry cost filter (owner decision 2026-11-03, §82): OFF unless the
+                 console saves costs.entry_filter.repete on (never config.yaml). On, an
+                 entry is skipped (rail "cost_filter", ledgered with its edge, round
+                 trip and multiple) when its expected edge is not more than multiple x
+                 the round-trip cost under the model being charged. The edge is a
+                 TRACK RECORD, not a forecast: the strategy's mean realised P&L per
+                 dollar over >=10 earlier closed trades, x this entry's value; fewer =
+                 no estimate = allowed. Fails OPEN (degradation event). Off = the
+                 cycle writes exactly what it wrote before. Live only (divergence #27);
+                 scripts/replay_cost_filter.py replays it read-only over a ledger copy.
 src/disclaimer.py Single source of the paper-trading/not-advice disclaimer (2026-07-22).
                  Dashboard, journal, blog footers render it; publisher/gates.py
                  re-exports it. Edit the text HERE only.

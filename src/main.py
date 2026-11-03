@@ -25,6 +25,7 @@ from memory import Memory
 import journal
 import learn
 import llm
+import cost_filter
 import datacheck
 import flatten_recovery
 import trade_plan
@@ -220,6 +221,41 @@ def _fees_for_rules(cfg: dict) -> tuple[dict | None, str]:
         return operator_settings.fees_by_ref(statepaths.operator_dir(cfg)), ""
     except operator_settings.FeeLedgerError as e:
         return None, str(e)
+
+
+def _cost_filter_verdict(cfg: dict, ledger: Ledger, strategy_name: str | None,
+                        qty: float, price: float, symbol: str) -> dict | None:
+    """The entry cost filter's verdict on one entry, or None when it does not run.
+
+    Owner decision 2026-11-03 (§82): "Trade less often where fees eat the edge: a
+    filter that skips trades whose expected edge doesn't clear the round-trip
+    cost. Off by default." The switch is the console's (`costs.entry_filter.
+    repete` in operator_settings.json). None, and NOTHING read or written, when
+    it is off or no settings were loaded this cycle: a cycle with the filter off
+    behaves and ledgers exactly as before.
+
+    On, the edge is this strategy's own live track record (cost_filter.py) and
+    the round trip is the cost model this cycle is charging. Any failure while
+    estimating FAILS OPEN: the entry goes ahead as it would have without the
+    filter, and a `degradation` event says the filter could not judge it.
+    Never raises."""
+    settings = operator_settings.from_cfg(cfg)
+    if settings is None or not cost_filter.is_on(settings.costs):
+        return None
+    try:
+        return cost_filter.evaluate(settings.costs, ledger.closed_trades(),
+                                    strategy_name, qty, price,
+                                    datetime.now(timezone.utc))
+    except Exception as e:  # noqa: BLE001 (the filter fails OPEN)
+        log.warning("%s: cost filter could not judge this entry, allowed (%s)",
+                    symbol, e)
+        try:
+            ledger.log_event("degradation",
+                             f"cost_filter: could not estimate for {symbol} "
+                             f"({e}); entry allowed")
+        except Exception:  # noqa: BLE001 (observability never blocks a cycle)
+            pass
+        return None
 
 
 def handle_close(trade_id: str, open_rec: dict, exit_price: float,
@@ -2127,6 +2163,32 @@ def _run_cycle(completed_bars_only: bool = False):
                             symbol, sig.action, msg)
                 return "blocked"
 
+        # Entry cost filter (§82, owner decision 2026-11-03): OFF unless the
+        # console saved it on. Off, nothing here runs and nothing is written.
+        cost_verdict = None
+        if sig.action in ENTRY_ACTIONS:
+            cost_verdict = _cost_filter_verdict(cfg, ledger, sig.strategy, qty,
+                                                price, symbol)
+            if cost_verdict is not None and not cost_verdict["clears"]:
+                msg = cost_filter.describe(cost_verdict)
+                tid = ledger.log_decision(symbol, sig.action, sig.reason,
+                                          sig.indicators, review, executed=False,
+                                          detail=msg, rail="cost_filter",
+                                          regime=regime_label,
+                                          strategy=sig.strategy,
+                                          cost_filter=cost_verdict)
+                stop, tp = _would_be_brackets(sig, bars, price)
+                memory.judgments.log_judgment(
+                    tid, symbol, sig.action, "rails_reject", 1.0, price,
+                    regime_label, kind="rails", executed=False, reasoning=msg,
+                    stop_price=stop, tp_price=tp, strategy=sig.strategy,
+                    judge_verdict=review.get("verdict"),
+                    judge_scale=review.get("scale"),
+                    judge_confidence=review.get("confidence"))
+                log.warning("%s: %s SKIPPED by the entry cost filter: %s",
+                            symbol, sig.action, msg)
+                return "blocked"
+
         # A strategy EXIT of a bracketed position must first cancel the
         # surviving protective legs (they reserve the shares). EXIT_ACTIONS,
         # not "sell": a short's bracket legs reserve its shares exactly as a
@@ -2233,11 +2295,14 @@ def _run_cycle(completed_bars_only: bool = False):
                 log.info("%s: PLAN\n%s", symbol, trade_plan.to_text(plan))
             except Exception as e:  # noqa: BLE001 — narration never blocks a trade
                 log.warning("trade_plan build failed for %s: %s", symbol, e)
+        # The cost filter's verdict rides on the entry only when the filter is
+        # on (cost_verdict is None otherwise, and the record is unchanged).
+        _cf_kw = {"cost_filter": cost_verdict} if cost_verdict is not None else {}
         trade_id = ledger.log_decision(symbol, sig.action, sig.reason, sig.indicators,
                                        review, executed=True, order=order,
                                        entry_price=price, qty=qty, detail=detail_tag,
                                        regime=regime_label, strategy=sig.strategy,
-                                       trade_plan=plan)
+                                       trade_plan=plan, **_cf_kw)
         if sig.action in ENTRY_ACTIONS:
             # Mirror this entry into the in-cycle open-trades view so the
             # portfolio-heat cap counts same-cycle entries too — otherwise a

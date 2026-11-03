@@ -4,19 +4,20 @@ Every gate verdict in `knowledge/backtest_candidates.md` rests on the simulator
 being a faithful model of the live bot. Where the two differ, a verdict measures
 a bot that does not exist.
 
-Twenty-six such differences have been found. Until 2026-07-28 they existed **only as
+Twenty-seven such differences have been found. Until 2026-07-28 they existed **only as
 prose scattered across forty sections of the gate ledger** — there was no list,
 so "how many are open?" had no answer, and #8 could sit closed-on-paper and open
 in fact for three days without anyone noticing. This file is the list.
 
-**Open as of 2026-10-28: #13, #14, #15, #16, #18, #19, #21, #23, #24, #25 and #26.** Nine of the eleven
+**Open as of 2026-11-03: #13, #14, #15, #16, #18, #19, #21, #23, #24, #25, #26 and #27.** Ten of the twelve
 are open *by construction* rather than by defect — a sampling fact about the live
 record, two judge inputs the simulator has no mechanism to represent, a cost the
 paper broker does not charge, a fill-session hazard that only materialises when
 the cycle runs long, a scanner that tests a live quote where the simulator
 tests a completed close, a judge whose identity changed with no baseline
-left to compare it against, and an operator cost the gates pin while live
-charges whatever the console says today. **#19 and #23 are not.** #19 is a plain
+left to compare it against, an operator cost the gates pin while live
+charges whatever the console says today, and an entry cost filter (off by
+default) that only the live bot has. **#19 and #23 are not.** #19 is a plain
 omission, found 2026-08-09, in which a live entry filter has been silently
 switched off in every gate ever run because no spec supplies the data it needs.
 **#23 is a third kind again** — a live rail the simulator never modelled, whose
@@ -70,6 +71,7 @@ code" is not closed; the repo has been wrong about that before.
 | 24 | **The live judge reads a per-symbol research dossier; the simulator models the judge as a distribution and cannot represent one** | **open** | open by construction — registered 2026-08-23 by the change that caused it; the calibration refuses until re-fit |
 | 25 | **The judge is a different model (`qwen3.8-27b`, self-hosted) and no measurement compares it to the one whose record the bot carries** | **open** | open by construction — registered 2026-08-28 by the change that caused it; the shadow baseline needs the vendor that ran out, which is why the switch happened |
 | 26 | **The operator's cost: gates charge a PINNED research block on every fill; live charges the console's current setting** (item 2, live never charging a short's opening order, closed 2026-10-28) | **open** | open by construction — registered 2026-10-28 by the change that caused it (the owner's after-cost decision); `tests/test_after_cost_backtest.py` pins the sim side, `tests/test_after_cost_rails.py` the live side; item 2 closed by `tests/test_operator_settings.py` (short opens) |
+| 27 | **The entry cost filter runs live only; the simulator never skips an entry for cost** | **open** | open by construction, and inert while it is off (the default): registered 2026-11-03 by the change that caused it (§82); `tests/test_cost_filter.py` pins the live side, `tests/test_after_cost_backtest.py::test_a_spec_cannot_declare_the_live_only_entry_filter` stops a spec from claiming to test it |
 
 > **Rows 13–16 were missing from this table until 2026-08-06**, and this is the
 > second time this file has been wrong in the direction that matters. The prose
@@ -1363,3 +1365,40 @@ Nothing retroactively. Every frozen spec predates the field, runs with no
 operator cost, and reproduces byte for byte (`run_gate.apply_operator_costs`
 removes any block config.yaml might carry). Gross verdicts stay gross verdicts:
 read them as **upper bounds** on what the after-cost bot would have scored.
+
+## #27: the entry cost filter runs live only
+
+**Opened 2026-11-03, by the change that caused it (§82).** Owner decision,
+Connor relaying Peter: *"Trade less often where fees eat the edge: a filter that
+skips trades whose expected edge doesn't clear the round-trip cost. Off by
+default."*
+
+**What differs.** Live, when the console saves `costs.entry_filter.repete.on`
+true, `main._cost_filter_verdict` (and its mirror in `swing_scan._enter`) skips
+an entry whose expected edge is not more than `multiple` times its round-trip
+cost, ledgered under `rail="cost_filter"` (`src/cost_filter.py`). The edge is
+the strategy's own LIVE track record: the mean realised P&L per dollar of entry
+value over its earlier closed trades, at least 10 of them. The simulator has no
+such rule and cannot have this one as written: its "track record" would be the
+simulated trades, a different quantity from the live record the rule reads.
+`gatespec.validate` refuses a spec whose `operator_costs` block carries an
+`entry_filter`, so no gate can claim to have tested it.
+
+**Direction of bias.** None while the filter is off, which is the default and
+the state it ships in. Switched on, live trades FEWER entries than any gate
+simulated: the skipped ones are the entries of a strategy whose live record
+does not cover the cost. If the filter skips losers, a gate verdict is
+**pessimistic** about the live bot; if it skips winners, **optimistic**. The
+sign is an empirical question, which is what `scripts/replay_cost_filter.py`
+measures over the live record (§82).
+
+**What it invalidates.** Nothing while it is off. Once it is on, every gate
+verdict (all of them predate it) measures a bot that takes entries the live bot
+would skip, from the date the console switched it on. The ledger's
+`operator_settings` event names the filter (`entry_filter=on xN`) on every cycle
+it is on, so that date is recoverable.
+
+**Status.** Open by construction. `tests/test_cost_filter.py` pins the live side
+in both directions (off writes exactly what a settings file without the field
+writes; on skips a losing record and passes a winning one; a failure fails
+open).

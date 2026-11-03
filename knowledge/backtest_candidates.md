@@ -7606,3 +7606,183 @@ config change. Neither arm is applied; the owner decides.
 Trial count through §81: 244 arm runs (241 + 3). K is closed at 16.
 
 <!-- recall: section=§81 specs=s81a -->
+
+## §82 - TRADING COSTS SHOWN NET, A USD/CAD CONVERSION COST, AND AN ENTRY COST FILTER THAT SHIPS OFF (DECISION, with a DIAGNOSTIC replay pre-registered here, K stays closed at 16, 2026-11-03)
+
+**Registers nothing in `research/registrations.jsonl` and records no verdict
+there.** Like §80 it is an owner's decision. It also freezes, before it is run,
+one diagnostic replay of the new filter over the live record; the replay's
+results are §83, appended after this section's hash was committed to
+`research/anchors.json`.
+
+### The decision, in the owner's words
+
+Connor, 2026-11-03, relaying Peter (CEO) before their talk about giving each bot
+real money:
+
+> "Show P&L after trading costs. Default C$9 per trade, configurable. Add the USD/CAD conversion cost on USD trades."
+
+> "Trade less often where fees eat the edge: a filter that skips trades whose expected edge doesn't clear the round-trip cost. Off by default."
+
+> "Replay it on each bot's history since Aug 20 and report how many trades it would have skipped and the net effect."
+
+> "repete-bot pre-registers measurements and freezes specs by hash; adding a cost model starts a new era, so record it the repo's way."
+
+### The new cost era, recorded
+
+This repo has no "era" machinery, so the era is recorded the way §80 recorded the
+first cost model: this section, plus what every fee line already carries.
+
+- **The model.** `src/cost_models.py` is re-copied from the console's
+  `reformatic/trading/costs.py` at its commit d6bf525 (branch net-pnl-presets),
+  bytes sha256 `72c87bd1453e07d4d001d6b1796487ae1615e937e287037b1fbb4fb664d9e9ef`
+  below the one header line. Settings schema stays 2.
+- **What it adds.** An optional `fx_conversion_pct` on the US-dollar markets: a
+  percent of the order's value, a side, on top of the market's model, for what a
+  Canadian broker keeps to convert Canadian dollars. 0 (the default) charges
+  nothing. The console converts every preset into US dollars before saving, so
+  this bot never sees a C$ amount and its fee lines stay in USD (the strict
+  reader refuses any other currency, §80). Every charge site already passed the
+  order's value (`notional` = |shares| x fill price), so a saved conversion is
+  charged with no change to the charge sites; the fee line's `basis` then
+  carries `conversion`.
+- **Broker presets.** `BROKER_PRESETS` (flat C$9, TD Direct Investing, Scotia
+  iTRADE, Wealthsimple) fill in the console's form; nothing changes until a
+  preset is saved. The fee line's `settings_version`, `settings_schema`, `model`
+  and `basis` already say which settings priced each order, so the first line
+  charged under a saved preset is where the new era starts in the ledger.
+- **Frozen gates are untouched.** The simulator charges a block pinned in a spec.
+  A block frozen before today has no `fx_conversion_pct`; `gatespec.validate`
+  still accepts it unchanged (`gatespec.as_declared`), and the simulator hashes
+  the block as charged (`backtest.charged_form`, without the filter and without
+  a 0 conversion), so the research block keeps the sha `97147170b54b8105...`
+  that §80 and §81 cite. A non-zero conversion moves the sha. A spec may not
+  declare an `entry_filter`: the simulator does not model it (divergence #27).
+
+### What is built
+
+- **Gross and net on the page.** The Pages dashboard gets an "After trading
+  costs" card beside the Performance cards: gross P&L (equity minus starting
+  equity, the hero's figure, before operator costs), the trading costs charged
+  (`memory/operator_fees.jsonl`), and net = gross minus costs, in USD, since the
+  bot started. The feed (`dashboard_data.json`) carries it as a new region,
+  `net_pnl`, whose root element holds the three figures as plain numbers for the
+  agent console. No existing region is built differently.
+- **Display name.** The page's `<title>` and `<h1>` read "Swing", with "repete"
+  kept once as a subtitle. Display strings only: directories, repos, services,
+  containers, the Pages URL, alert titles, identifiers, file names and the robot's
+  own name in the explainer are unchanged.
+- **The entry cost filter, OFF.** `src/cost_filter.py`, called at one point in
+  `main._process_signal` (after every rail and the drift guard, before the order)
+  and mirrored in `swing_scan._enter`. The switch is the console's
+  (`costs.entry_filter.repete`), never config.yaml. Off, nothing is read or
+  written: the cycle ledgers exactly what it ledgered before
+  (`tests/test_cost_filter.py::test_off_writes_exactly_what_a_settings_file_without_a_filter_writes`).
+  On, an entry is skipped when its expected edge is not more than `multiple`
+  times its round-trip cost (two orders of this entry's size and value, under
+  the model the bot is charging that cycle). A skip is a decision with
+  `rail="cost_filter"`, a `cost_filter` field (edge, round trip, multiple, how
+  each was worked out) and a rails judgment, like every other rail. Any error
+  while estimating fails OPEN: the entry goes ahead and a `degradation` event
+  says the filter could not judge it.
+
+### The expected edge: a track record, not a forecast
+
+`trade_plan.py` refuses to write a forecast and §77 retired the edge claim, so the
+filter's "expected edge" is a description, never a claim:
+
+> edge = (mean realised P&L per dollar of entry value over this bot's CLOSED
+> trades of the SAME strategy whose close was recorded strictly before this
+> entry) x this entry's value (qty x signal price). Realised P&L is the outcome
+> record's `pnl`, before operator costs. An entry that never filled is not a
+> trade and is left out. Fewer than 10 such trades: no estimate, and the entry
+> is allowed.
+
+The brief allowed a registered per-strategy backtest figure below 10 trades.
+There is none to use: verdict rows are per arm, never per strategy, so below 10
+the edge is None. Nothing better is already computed at entry: the bot records a
+stop and the judge's confidence, neither of which is an expected return.
+
+### The replay, pre-registered (DIAGNOSTIC)
+
+**Input, pinned.** A copy of the live `memory/ledger.jsonl` taken 2026-11-03
+08:47 ET, before the session: 10,521 lines, sha256
+`b87c419b1e7009ea1692dc417a433205320790134869fcf40c89fff401dbe5bd`. Script
+`scripts/replay_cost_filter.py` sha256
+`98663b64c12ab954d8808bf31fc81c2fb9e53b3f8c4e22b93c72baeb282eff9d`, rule
+`src/cost_filter.py` sha256
+`5e4ad758fa55d46825bc2febfd928411b45c60b84a1bcf6e15a900407163d93e`.
+
+**What it does.** For every executed entry recorded at or after
+2026-08-20T00:00Z, the filter at multiple 1.0, using only trades closed before
+that entry, under four cost scenarios: `research_paper` (the costs the bot
+charges now), `flat_c9_paper` (C$9 an order converted at 1.3978, plus 1.5% a
+side to convert), and both again with every order scaled to a US$1,000 account
+(`research_1k`, `flat_c9_1k`; k = 1000 / 100,000). Per scenario: considered,
+skipped, no estimate, skipped-but-still-open (left out of the net effect), the
+skipped closed trades' P&L before cost, their two orders' cost, and net effect =
+minus the sum of their P&L after that cost (positive = skipping them would have
+left the account better off).
+
+**Already seen before writing this.** The window holds 47 executed entries
+(meanrev 28, ma_crossover 17, tsmom 2), 45 filled; 54 round trips closed in it,
+gross -$91.75; closed trades all-time by strategy: tsmom 34, meanrev 29,
+ma_crossover 5. Divergence #23 records tsmom's live PF of 0.145 at n=15. Not
+seen: any per-dollar mean, any estimate at any entry, any filter output.
+
+**Prior.** ma_crossover never reaches 10 earlier closed trades (5 all-time), so
+all 17 of its entries pass with no estimate in every scenario. tsmom's two
+entries are expected to be skipped everywhere (a record with PF 0.145 is
+negative per dollar). Under `research_paper` the round trip is about US$2 on a
+US$5,000 order (0.04%), so meanrev is skipped only where its record is negative
+per dollar, and I GENUINELY DO NOT KNOW its sign; its early entries, before it
+had 10 closes, pass with no estimate. Under both C$9 scenarios the round trip is
+about US$12.88 plus 3% of the order's value, which I expect no strategy's live
+record to clear: every entry with an estimate is skipped. In the 1k scenarios
+the per-share cost hits its 1% cap (2% a round trip), so they should skip at
+least what `research_paper` skips. Net effect: positive in the C$9 scenarios,
+because the trades skipped there would have paid more in cost than they made,
+which says those trades do not survive that cost, not that the filter has
+skill. In `research_paper`, sign unknown.
+
+**Reading rule, fixed now.**
+1. DIAGNOSTIC: it decides nothing. The filter ships off, and no result here
+   switches it on or picks a multiple. That is the owner's choice on the
+   console.
+2. A positive net effect in a scenario says only that, in this window, the trades
+   the filter would have skipped made less than their cost under that scenario.
+   A negative one says the filter would have skipped trades that paid for
+   their cost.
+3. Every scenario is reported verbatim in §83, including any with no skips.
+
+**Failure modes.**
+- **Path dependence.** The replay holds every other decision fixed. A skipped
+  entry frees a slot, cash, heat and a sector place that the rails gave to
+  nobody that day, and the re-entry cooldown and trade cap would have moved.
+  This prices the trades that happened; it does not re-run the bot.
+- **Small samples.** Each estimate rests on 10 to about 30 earlier trades of
+  one strategy. tsmom's record comes mostly from before the window.
+- **Not out of sample.** No entry sees its own outcome or anything that closed
+  after it, but the window's early trades feed the window's later estimates.
+- **Equal weights.** The per-dollar mean weighs a US$2,000 trade and a
+  US$10,000 trade alike.
+- **Exit prices.** A skipped trade's close is priced at the recorded exit
+  price, which for a strategy exit is the decision price, not the broker's
+  fill.
+- **The 1k scaling assumes fractional shares.** The bot's bracket orders need
+  whole shares; a US$1,000 account could not hold most of these positions as
+  sized.
+- **One exchange rate.** The C$9 is converted at the Bank of Canada rate for
+  2026-11-02 across the whole window.
+- **Unfilled entries** (2) are considered and move nothing: they paid nothing
+  and made nothing.
+
+### Accounting
+
+The replay runs no backtester arm and appends nothing to `research/trials.jsonl`.
+`gatespec` cannot express it (no snapshot, no arms: it reads the live record), so
+the freeze is this section's body hash in `research/anchors.json` and the three
+hashes above, committed before the run. Trial count through §82: 244 arm runs.
+K is closed at 16.
+
+<!-- recall: section=§82 specs= -->
