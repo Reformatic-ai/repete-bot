@@ -7786,3 +7786,70 @@ hashes above, committed before the run. Trial count through §82: 244 arm runs.
 K is closed at 16.
 
 <!-- recall: section=§82 specs= -->
+
+## §83 - THE §82 REPLAY: THE C$9 SCENARIOS SKIP EVERY ENTRY THEY CAN JUDGE, THE RESEARCH COSTS SKIP ONLY tsmom (DIAGNOSTIC, results of the replay pre-registered in §82, K stays closed at 16, 2026-11-03)
+
+**Run once, after §82 was committed and pushed** (commit 8f25c1d, branch
+`net-pnl-filter`, which carries §82's body hash in `research/anchors.json`). Input,
+script and rule matched the hashes §82 pinned: ledger copy `b87c419b1e7009ea...`,
+`scripts/replay_cost_filter.py` `98663b64c12ab954...`, `src/cost_filter.py`
+`5e4ad758fa55d468...`. Window from 2026-08-20T00:00Z; filter multiple 1.0;
+starting equity US$100,000, so k = 0.01 for the US$1,000 scenarios. Report:
+`~/scratch/net-pnl/replay-repete.json` (not committed; the numbers are below).
+
+47 entries in the window: 45 filled, 2 never filled, 12 still open. 25 of them
+had no estimate in every scenario: all 17 ma_crossover entries (5 closed
+ma_crossover trades all-time, never 10) and meanrev's first 8 (before meanrev had
+10 closes). So the filter could judge 22: tsmom's 2 and meanrev's last 20.
+
+| scenario | considered | skipped | no estimate | skipped, still open | skipped P&L before cost | their cost | net effect |
+|---|---|---|---|---|---|---|---|
+| research_paper | 47 | 2 | 25 | 0 | -$25.87 | $4.00 | **+$29.87** |
+| flat_c9_paper | 47 | 22 | 25 | 1 | +$472.04 | $3,605.68 | **+$3,133.64** |
+| research_1k | 47 | 10 | 25 | 1 | -$3.59 | $7.66 | **+$11.25** |
+| flat_c9_1k | 47 | 22 | 25 | 1 | +$4.72 | $303.78 | **+$299.06** |
+
+Net effect = minus the skipped closed trades' P&L after that scenario's cost;
+positive = skipping them would have left the account better off. All amounts US$.
+
+**What was skipped, and why** (read off the same run, after it):
+
+- **research_paper skips only tsmom's 2 entries** (2026-08-20, GS and BAC). At
+  each, tsmom's record was 14 earlier closes at -0.60% per dollar, so the
+  estimate was negative against a US$2 round trip. One of the two won (+$70.28),
+  one lost (-$96.14). meanrev's record at its 20 judged entries ran from +0.70% to
+  +2.70% per dollar, far above a 0.04% round trip, so it skipped none of them.
+- **research_1k adds 8 meanrev entries.** At US$1,000 the per-share cost hits its
+  1% cap: 2% a round trip, which meanrev's record cleared at 12 of its 20 judged
+  entries and not at 8.
+- **Both C$9 scenarios skip all 22 judged entries.** C$9 converted is US$6.44 an
+  order, plus 1.5% a side to convert: about US$12.88 plus 3% of the order's value
+  for a round trip, about US$163 on a US$5,000 order (this bot's entries in the
+  window averaged US$4,426). No strategy's record came near 3% per trade. The 21 skipped trades that closed
+  made +$472.04 before cost and would have paid $3,605.68 in cost.
+
+**Prior scorecard** (§82). Right: every ma_crossover entry passes with no
+estimate; tsmom's 2 entries are skipped in every scenario; both C$9 scenarios
+skip every entry with an estimate; the 1k scenarios skip at least what
+research_paper skips (10 against 2); net effect positive in both C$9 scenarios.
+Not predicted: meanrev's sign under research costs, which §82 said it did not
+know. It was positive at every judged entry, so research_paper skipped no
+meanrev entry.
+
+**Reading, by the rule frozen in §82.** DIAGNOSTIC: nothing is switched on and no
+multiple is chosen; the filter ships off and that stays the owner's call.
+
+- research_paper's +$29.87 rests on two trades and says nothing beyond them.
+- The C$9 rows say the trades this bot makes do not survive a Canadian retail
+  cost at its current order size: about 3.3% a round trip, against a per-trade
+  record that peaked at 2.7%. That is a statement about cost against order size,
+  and most of it is the conversion (US$150 of the US$163 on a US$5,000 order,
+  which a US-dollar account avoids), not a finding that the filter has skill. A filter that skips everything it can
+  judge also "helps" whenever the cost exceeds the record.
+- Every failure mode §82 named still applies: path dependence above all (nothing
+  here re-runs the bot), and samples of 10 to 28 earlier trades per estimate.
+
+**Accounting.** No backtester arm, nothing appended to `research/trials.jsonl`.
+Trial count through §83: 244 arm runs. K is closed at 16.
+
+<!-- recall: section=§83 specs= -->
