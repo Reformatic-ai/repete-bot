@@ -1286,6 +1286,31 @@
         "s81a"
       ],
       "spec_source": "id+header+trailer"
+    },
+    {
+      "key": "§82",
+      "heading": "## §82 - TRADING COSTS SHOWN NET, A USD/CAD CONVERSION COST, AND AN ENTRY COST FILTER THAT SHIPS OFF (DECISION, with a DIAGNOSTIC replay pre-registered here, K stays closed at 16, 2026-11-03)",
+      "start_line": 7610,
+      "body_sha256": "7da1bc3980e8654d1285293f9f859b3b98850a8247eef8a81fe046c244d8e5cd",
+      "subheadings": [
+        "### The decision, in the owner's words",
+        "### The new cost era, recorded",
+        "### What is built",
+        "### The expected edge: a track record, not a forecast",
+        "### The replay, pre-registered (DIAGNOSTIC)",
+        "### Accounting"
+      ],
+      "specs": [],
+      "spec_source": "id+header+trailer"
+    },
+    {
+      "key": "§83",
+      "heading": "## §83 - THE §82 REPLAY: THE C$9 SCENARIOS SKIP EVERY ENTRY THEY CAN JUDGE, THE RESEARCH COSTS SKIP ONLY tsmom (DIAGNOSTIC, results of the replay pre-registered in §82, K stays closed at 16, 2026-11-03)",
+      "start_line": 7790,
+      "body_sha256": "42e7ae1f7615c7d7ae10252ccbee337bab0805771312a57e95f0bec9edd859ae",
+      "subheadings": [],
+      "specs": [],
+      "spec_source": "id+header+trailer"
     }
   ]
 }

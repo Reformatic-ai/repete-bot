@@ -51,7 +51,8 @@ class Ledger:
                      entry_ts: str | None = None,
                      trade_plan: dict | None = None,
                      rail: str | None = None,
-                     rail_vector: dict | None = None) -> str:
+                     rail_vector: dict | None = None,
+                     cost_filter: dict | None = None) -> str:
         trade_id = str(uuid.uuid4())[:8]
         # Pull the prompt record OUT of llm_review before it is written.
         # llm_review is read by review.py, dashboard.py, learn.py,
@@ -145,6 +146,11 @@ class Ledger:
             # (src/trade_plan.py) — never generated prose, never a forecast.
             "trade_plan": trade_plan,
             "outcome": None,               # embargoed until close — see close_trade()
+            # The entry cost filter's verdict (§82, 2026-11-03): edge, round
+            # trip, multiple and how each was worked out. Written ONLY when the
+            # filter ran (it is off by default), so a record made with it off
+            # is byte-identical to one made before the filter existed.
+            **({"cost_filter": cost_filter} if cost_filter is not None else {}),
         })
         return trade_id
 

@@ -28,8 +28,10 @@ from ledger import Ledger
 from lessons import LessonStore
 from judgments import JudgmentStore, calibration_metrics, calibration_line
 import disclaimer
+import operator_settings
 import review
 import sitepaths
+import statepaths
 
 OUT_PATH = "dashboard.html"
 DATA_PATH = "dashboard_data.json"
@@ -1049,6 +1051,82 @@ def _mark_age_note(mark_ts: str | None, now: datetime) -> str:
     return f' <span class=small>— valued {stamp}</span>'
 
 
+# The display name (Peter, 2026-11-03): readers see "Swing"; the old name stays
+# visible once as a subtitle. Display strings ONLY: the directory, repo, service,
+# container, Pages URL, alert titles, identifiers and the robot's own name in the
+# explainer are unchanged.
+DISPLAY_NAME = "Swing"
+OLD_NAME = "repete"
+NET_PNL_NOTE = ("Trading costs are simulated at the rates set on the console's "
+                "/trading page.")
+
+
+def _iso_z(ts) -> str | None:
+    """An ISO timestamp as UTC, whole seconds, with a Z: 2026-07-14T23:04:55Z."""
+    if not ts:
+        return None
+    try:
+        t = datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if t.tzinfo is None:
+        t = t.replace(tzinfo=timezone.utc)
+    return t.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _first_fee_day(op_dir: str) -> str | None:
+    """The day the first simulated trading cost was charged (lenient, display
+    only), so the card can say costs were not charged before then."""
+    first = None
+    try:
+        with open(os.path.join(op_dir, operator_settings.FEES_FILE)) as f:
+            for line in f:
+                try:
+                    ts = _iso_z(json.loads(line)["ts"])
+                except (ValueError, KeyError, TypeError):
+                    continue
+                if ts and (first is None or ts < first):
+                    first = ts
+    except OSError:
+        return None
+    return first[:10] if first else None
+
+
+def net_pnl_region(gross: float, costs: float, since: str | None,
+                   currency: str = operator_settings.CURRENCY,
+                   costs_from: str | None = None) -> str:
+    """The "After trading costs" card (Peter, 2026-11-03): gross P&L (what the
+    hero already calls total P&L: broker equity minus starting equity, before the
+    operator's simulated cost), the cost charged (operator_fees.jsonl), and net =
+    gross - costs. Its root element carries the three figures as plain numbers
+    (2 decimals, no commas) for the agent console's fleet cards to read."""
+    gross, costs = round(float(gross), 2), round(float(costs), 2)
+    net = round(gross - costs, 2)
+
+    def _tone(v):
+        return "win" if v > 0 else "loss" if v < 0 else ""
+
+    cost_label = "trading costs"
+    if costs_from:
+        cost_label += f" (charged since {costs_from})"
+    cells = [
+        (_fmt_signed(gross), "gross P&L (before trading costs)", _tone(gross)),
+        (f"-${abs(costs):,.2f}" if costs else "$0.00", cost_label,
+         "loss" if costs > 0 else ""),
+        (_fmt_signed(net), "net P&L (after trading costs)", _tone(net)),
+    ]
+    return (f'<div class="net-pnl" data-gross="{gross:.2f}" '
+            f'data-costs="{costs:.2f}" data-net="{net:.2f}" '
+            f'data-currency="{_esc(currency)}" data-since="{_esc(since or "")}">'
+            f'<section class=cardgroup><h3>After trading costs '
+            f'<span class=small>({_esc(currency)}, since the bot started)</span>'
+            f'</h3><div class=cards>'
+            + "".join(f'<div class="card big {tone}"><div class=v>{v}</div>'
+                      f'<div class=k>{_esc(k)}</div></div>'
+                      for v, k, tone in cells)
+            + f'</div><p class=small>{_esc(NET_PNL_NOTE)}</p></section></div>')
+
+
 def _how_it_works() -> str:
     """First-time-visitor explainer: what Repete is and how one decision
     happens, in plain language. Static chrome, not a `regions` entry — this
@@ -1708,6 +1786,14 @@ def render(cfg: dict | None = None, out_path: str | None = None,
         "strat": strat_tbl,
         "months": month_tbl,
     }
+    # Gross and net side by side (2026-11-03). Added BESIDE the regions above,
+    # none of which is built differently. Costs are the lenient display total of
+    # memory/operator_fees.jsonl, the same figure health reports.
+    _op_dir = statepaths.operator_dir(cfg)
+    regions["net_pnl"] = net_pnl_region(
+        total_pl, operator_settings.total(_op_dir),
+        _iso_z(records[0].get("ts")) if records else None,
+        costs_from=_first_fee_day(_op_dir))
     payload = {"generated_at": now.isoformat(), "regions": regions}
     # TWO CLOCKS, deliberately. `generated_at` is when this page was RENDERED
     # and is ~0 by construction; `data_at` is how old what it SHOWS actually
@@ -1750,10 +1836,10 @@ def render(cfg: dict | None = None, out_path: str | None = None,
 
     doc = f"""<!DOCTYPE html><html><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Repete</title><style>{CSS}</style></head><body>
+<title>{DISPLAY_NAME} · {OLD_NAME}</title><style>{CSS}</style></head><body>
 {_boot(total_pl, len(open_now), n_symbols)}
 <div class=wrap>
-<h1>Repete <span class=small>[PAPER] — generated
+<h1>{DISPLAY_NAME} <span class=small>{OLD_NAME} · [PAPER] — generated
 {now.strftime('%Y-%m-%d %H:%M UTC')}</span>
 &nbsp; <a class=x href="journal.html">trade journal →</a>
 &nbsp; <a class=x href="blog.html">blog →</a></h1>
@@ -1766,6 +1852,7 @@ account · rebuilt after every cycle from the append-only ledger
 <div id=rgn-tape>{regions['tape']}</div>
 <div id=rgn-hero>{regions['hero']}</div>
 <div id=rgn-cards>{regions['cards']}</div>
+<div id=rgn-net_pnl>{regions['net_pnl']}</div>
 <div id=rgn-handoff>{regions['handoff']}</div>
 <h2>💼 Open positions{_mark_age_note(mark_ts, now)}</h2>
 <div id=rgn-positions>{regions['positions']}</div>

@@ -121,7 +121,9 @@ def test_every_post_judge_rails_site_carries_the_verdict():
     src = (ROOT / "src" / "main.py").read_text()
     calls = src.count('"rails_reject"')
     carried = src.count("judge_verdict=review.get")
-    assert carried == 3, (
-        f"expected the 3 post-judge rails sites to carry the verdict, "
+    # 4 since 2026-11-03: the entry cost filter (§82) is a post-judge rails
+    # site too and carries the verdict like the other three.
+    assert carried == 4, (
+        f"expected the 4 post-judge rails sites to carry the verdict, "
         f"found {carried}")
     assert calls >= 4, "the pre-judge rails site should still exist uncarried"

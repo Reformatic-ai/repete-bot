@@ -342,8 +342,24 @@ def operator_costs_block(cfg: dict) -> dict | None:
     raw = (cfg.get("backtest") or {}).get("operator_costs")
     if raw is None or raw is False:
         return None
-    block = cost_models.validate(raw)
+    block = charged_form(cost_models.validate(raw))
     return None if block[OPERATOR_MARKET]["model"] == "off" else block
+
+
+def charged_form(block: dict) -> dict:
+    """The block as the simulator charges it: every market's model and prices,
+    without the per-bot `entry_filter` (a live-only rule the simulator does not
+    model, divergence #27) and without an OPTIONAL value at its default (the
+    2026-11-03 `fx_conversion_pct` of 0 charges nothing). This is what the sha and
+    the summary stamp, so a block frozen before 2026-11-03 keeps its sha
+    (97147170b54b8105... for the research values) and a non-zero conversion moves
+    it."""
+    out = {m: dict(block[m]) for m in cost_models.MARKETS}
+    for market in cost_models.MARKETS:
+        for key, default in cost_models.OPTIONAL.items():
+            if out[market].get(key, default) == default:
+                out[market].pop(key, None)
+    return out
 
 
 def operator_costs_sha256(block: dict | None) -> str | None:

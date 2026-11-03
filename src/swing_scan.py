@@ -51,6 +51,7 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+import cost_filter
 import llm
 import main as cycle
 import risk
@@ -230,6 +231,23 @@ def _enter(cand: dict, live: float, cfg, ledger, memory, broker, account,
             kind="rails", executed=False, reasoning=msg, strategy=STRATEGY)
         return "blocked"
 
+    # Entry cost filter (§82), mirrored from main._process_signal: off unless
+    # the console saved it on, and then it reads and writes exactly what the
+    # cycle's does.
+    cost_verdict = cycle._cost_filter_verdict(cfg, ledger, STRATEGY, qty, price,
+                                              symbol)
+    if cost_verdict is not None and not cost_verdict["clears"]:
+        msg = cost_filter.describe(cost_verdict)
+        tid = ledger.log_decision(symbol, "buy", sig.reason, sig.indicators,
+                                  review, executed=False, detail=msg,
+                                  rail="cost_filter", regime=regime_label,
+                                  strategy=STRATEGY, cost_filter=cost_verdict)
+        memory.judgments.log_judgment(
+            tid, symbol, "buy", "rails_reject", 1.0, price, regime_label,
+            kind="rails", executed=False, reasoning=msg, strategy=STRATEGY)
+        log.warning("%s: buy SKIPPED by the entry cost filter: %s", symbol, msg)
+        return "blocked"
+
     # Same idempotency key the 15:45 cycle would derive for this symbol and
     # day — so scan and cycle cannot double-enter one name between them, with
     # the broker as the arbiter rather than any state file of ours.
@@ -260,7 +278,9 @@ def _enter(cand: dict, live: float, cfg, ledger, memory, broker, account,
                                    review, executed=True, order=order,
                                    entry_price=price, qty=qty,
                                    detail="swing_scan", regime=regime_label,
-                                   strategy=STRATEGY, trade_plan=plan)
+                                   strategy=STRATEGY, trade_plan=plan,
+                                   **({"cost_filter": cost_verdict}
+                                      if cost_verdict is not None else {}))
     # kind is conditional for the same reason as main.py's executed judgment:
     # a fallback approval is not a judgement, and counting it as one is how
     # every recorded approval in this bot's history came to be a fallback.

@@ -9,7 +9,7 @@ Every gate verdict in `knowledge/backtest_candidates.md` rests on the simulator
 being a faithful model of the live bot. **Where the two differ, a verdict
 measures a bot that does not exist.**
 
-`docs/divergences.md` is the list. Twenty-six are recorded (through #26). Before 2026-07-28 they
+`docs/divergences.md` is the list. Twenty-seven are recorded (through #27). Before 2026-07-28 they
 existed only as prose scattered across forty sections, so "how many are open?"
 had no answer — and #8 sat closed-on-paper and open in fact for three days.
 

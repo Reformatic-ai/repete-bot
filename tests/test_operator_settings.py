@@ -779,6 +779,8 @@ def test_health_reports_settings_without_degrading(cfg, opdir, capsys,
         "fee_on_crypto": False, "fee_on_fx": False, "frequency": "high",
         "updated_at": "2026-10-24T14:00:00Z", "fees_charged_total": 9.0,
         "problem": None,
+        # 2026-11-03 (§82): the entry cost filter, off by default.
+        "entry_filter": {"on": False, "multiple": 1.0},
         # 2026-10-28: the rails' STRICT read of the same log, None = clean.
         "fee_ledger_problem": None}
 

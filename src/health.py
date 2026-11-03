@@ -439,6 +439,8 @@ def status(cfg: dict | None = None, now: datetime | None = None,
             "updated_at": op.updated_at,
             "fees_charged_total": operator_settings.total(op_dir),
             "problem": op.problem or None,
+            # The entry cost filter (§82): {"on", "multiple"}, off by default.
+            "entry_filter": op.entry_filter(),
         }
         # The rails' STRICT read of the same log (2026-10-28). total() above is
         # the lenient display figure; if the strict read fails, every rail that

@@ -167,6 +167,28 @@ def _need(cond, msg):
         raise SpecError(msg)
 
 
+def as_declared(normalised: dict, declared: dict) -> dict:
+    """cost_models.validate()'s output, less what validate ADDS by default and the
+    spec did not write: the per-bot `entry_filter` (never charged) and an OPTIONAL
+    value (`fx_conversion_pct`, 2026-11-03) left at its default. A block frozen
+    before those fields existed therefore still compares equal to itself, and a
+    block that writes them out compares equal too. Anything validate drops or
+    changes still shows up as a difference."""
+    import cost_models
+    out = {k: (dict(v) if isinstance(v, dict) else v)
+           for k, v in normalised.items()}
+    if "entry_filter" not in declared:
+        out.pop("entry_filter", None)
+    for market in cost_models.MARKETS:
+        given = declared.get(market)
+        given = given if isinstance(given, dict) else {}
+        for key, default in cost_models.OPTIONAL.items():
+            if (key not in given and key in out.get(market, {})
+                    and out[market][key] == default):
+                del out[market][key]
+    return out
+
+
 def load(path: str) -> dict:
     """Parse and validate one spec file. Raises SpecError, never returns junk."""
     import yaml
@@ -346,8 +368,15 @@ def validate(spec: dict) -> None:
               "reproduced, because it does not say what was charged")
         if isinstance(oc, dict):
             import cost_models
+            # The entry cost filter (§82, 2026-11-03) is a live-only rule: the
+            # simulator does not model it (docs/divergences.md #27), so a spec
+            # that declared one would claim a test that never ran.
+            _need("entry_filter" not in oc,
+                  "operator_costs must not carry an `entry_filter`: the "
+                  "simulator does not model the entry cost filter (divergence "
+                  "#27), so the run would not test what the spec says")
             try:
-                normalised = cost_models.validate(oc)
+                normalised = as_declared(cost_models.validate(oc), oc)
             except ValueError as e:
                 raise SpecError(f"operator_costs is not a valid cost-models "
                                 f"block: {e}") from None
