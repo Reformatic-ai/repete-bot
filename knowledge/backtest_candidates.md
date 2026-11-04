@@ -317,7 +317,7 @@ Consequences, binding on all future work:
    with it: with N prior comparisons, a marginal pass is more likely to be luck
    than edge. Prefer candidates that pass by a clear margin.
 
-Trial count through §81: 244 arm runs — from `research/verdicts.jsonl`, checked
+Trial count through §84: 246 arm runs — from `research/verdicts.jsonl`, checked
 by `tests/test_trial_count.py`, printed by `scripts/trial_report.py`. This line
 was last hand-typed as "through §11: ~11" and then left for sixty-two
 sections; it is now the one the guard reads, so it cannot drift again.
@@ -7853,3 +7853,67 @@ multiple is chosen; the filter ships off and that stays the owner's call.
 Trial count through §83: 244 arm runs. K is closed at 16.
 
 <!-- recall: section=§83 specs= -->
+
+## §84 — s81a's TRAILING STOP ON THE BOT THAT RUNS (tsmom off, judge simulated): DIRECTIONALLY BETTER AGAIN, STILL NOT DISTINGUISHABLE FROM NOISE (DIAGNOSTIC, K stays closed at 16, pre-registered 2026-11-04)
+
+**Spec `s84a`, registered and run once on 2026-11-04, report only.** The owner's
+round-two plan (2026-11-04, workstream B3) asked for one pre-registered,
+after-cost test of s81a's best arm on the bot that actually runs: tsmom off and
+the judge simulated. The plan called it s81b; it is s84a because a spec's id
+names the section it is written up in, and §81 is closed. The prior, the four
+clauses and the reading rule were frozen in the spec, and the registration and
+prior reading were committed (493c05b) before the run.
+
+**Baseline is the live setup** as of 493c05b on branch `round2-repete`:
+`strategies.tsmom.enabled: false` (retired live by the kill since 2026-08-20;
+divergence #23 closed by the same commit), the sector cap with `sector_unmapped`
+and "Broad market" capped at 1, both also set in the spec's `shared:` block so
+the spec hash carries them. **Judge ON** for the first time since the judge
+moved to qwen3.8-27b: the calibration was re-fit by that commit on qwen-era rows
+only (`calibrate_judge.py --since 2026-08-28`: 1,710 judged buys
+2026-08-31..2026-11-04, veto 37.4%, mean scale 0.485). After cost: the live
+equities block, sha `97147170b54b8105…`, as in §80 and §81. Venue: §43d's wide
+2022-01-01..2026-07-24 snapshot, entries limited to the 38 core names.
+
+| arm | return | PF | maxDD | trades | win rate | deployed | cost paid | (a) n≥30 | (b) PF > live | (c) maxDD ≤ live+1pp | (d) paired, K=16 |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| baseline (live) | +29.98% | 1.449 | 7.65% | 750 | 50.1% | 37.0% | $1,500 | | | | |
+| trail_ma | **+32.41%** | **1.453** | **6.32%** | 922 | 53.1% | 28.7% | $1,845 | PASS | PASS | PASS | FAIL |
+
+(d) in detail: trail_ma −$4.82/trade against baseline, 99.69% CI [−$36.55,
++$36.71], 710 shared trades (74% common), 40 baseline-only, 212 candidate-only.
+INCONCLUSIVE. SPY over the same window: +63.52%, maxDD 24.50%. Judge activity
+(the runner refuses a judge-on verdict with none): baseline 1,535 entries sized,
+921 cut, 587 vetoed; trail_ma 1,694 / 1,014 / 648.
+
+**Reading, by the rule frozen in the spec: trail_ma — "directionally better,
+not distinguishable from noise".** It clears (a)–(c) and fails only (d), as in
+s81a. That is NOT a reason to switch. Return is higher and drawdown lower
+(−1.33pp), but the per-trade paired difference is now slightly NEGATIVE: the
+extra return comes from 172 more trades, not from better ones, and PF is level
+(+0.004). Blocks moved the way earlier exits would move them: sector-cap
+refusals 117 → 79, regime-exposure 80 → 44, re-entry cooldown 98 → 162, and
+1,856 signals against 1,633 — a trail that closes a position sooner frees its
+symbol and its sector slot sooner.
+
+**Prior scorecard.** Right: (d) fails; (a) passes with several hundred trades,
+fewer than s81a (750 and 922 against 916 and 1,002); (b) the lean to PASS held,
+by +0.004; (c) passes, maxDD lower; trail_ma takes more entries. Wrong, or not
+as predicted: the entry rise is LARGER than s81a's (+172 against +86), and it
+did not come through the heat cap — the runner reports no heat or correlation
+refusals to speak of in either arm (correlation 1 and 1); with judged positions
+near half size the heat cap does not bind, and the extra entries come from the
+sector, regime and symbol capacity that earlier exits free.
+
+**What the levels say, and do not.** Both arms sit far below s81a's (+121.77%
+baseline): about 37% deployed against 75%, because the simulated judge vetoes
+about 37% of entries and halves most of the rest. Three things moved at once
+(tsmom off, judge on, Broad-market cap), so the gap is not attributed to any one
+of them (the spec's failure modes). Judge simulated as a pooled distribution —
+the live judge's veto rate on ma_crossover alone was 72% (n=67), not 37% — on
+survivor-selected names, one venue (one bear year, three up years). DIAGNOSTIC
+licenses no config change; neither arm is applied, and the owner decides.
+
+Trial count through §84: 246 arm runs (244 + 2). K is closed at 16.
+
+<!-- recall: section=§84 specs=s84a -->

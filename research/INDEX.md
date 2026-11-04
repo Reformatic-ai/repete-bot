@@ -4,7 +4,7 @@
 `tests/test_research_index.py` regenerates this file and fails if the
 committed copy differs.
 
-One line per section of [`../knowledge/backtest_candidates.md`](../knowledge/backtest_candidates.md) — **88 sections, 7,855 lines**.
+One line per section of [`../knowledge/backtest_candidates.md`](../knowledge/backtest_candidates.md) — **89 sections, 7,919 lines**.
 
 That file is chronological and append-only, and it is deliberately NOT
 split. The chronology is the evidence that nothing was retrofitted: a
@@ -110,6 +110,7 @@ column has been corrected — they are placed side by side.
 | §81 | TRAIL ma_crossover / WIDEN THE meanrev STOP: 0 OF 2 CLEAR, ONE IS DIRECTIONAL… | DIAGNOSTIC | pre-registered | 0/1 | 2026-11-02 |
 | §82 | TRADING COSTS SHOWN NET, A USD/CAD CONVERSION COST, AND AN ENTRY COST FILTER … | DIAGNOSTIC | pre-registered | — | 2026-11-03 |
 | §83 | THE §82 REPLAY: THE C$9 SCENARIOS SKIP EVERY ENTRY THEY CAN JUDGE, THE RESEAR… | DIAGNOSTIC | pre-registered | — | 2026-11-03 |
+| §84 | s81a's TRAILING STOP ON THE BOT THAT RUNS (tsmom off, judge simulated): DIREC… | DIAGNOSTIC | pre-registered | 0/1 | 2026-11-04 |
 
 A `gate result` of `—` means no spec was registered against that
 section; the first registered section is §35. And a ratio is not a section
