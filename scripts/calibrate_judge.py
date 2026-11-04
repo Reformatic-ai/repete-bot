@@ -3,6 +3,12 @@
 
     python scripts/calibrate_judge.py                 # print, write nothing
     python scripts/calibrate_judge.py --write         # update the calibration
+    python scripts/calibrate_judge.py --since 2026-09-01   # a later window
+
+Only rows judged ON OR AFTER `--since` count (default 2026-08-28, the day the
+judge moved from claude-sonnet-5 to the self-hosted qwen3.8-27b and
+`context_version` went 2 -> 3). Before it, one fit would pool two different
+judges' verdicts, which is the mixing the version guard exists to refuse.
 
 Why this exists
 ---------------
@@ -53,10 +59,41 @@ from llm import is_fallback_review  # noqa: E402
 # haircut model refuses to load a calibration that did not clear it.
 MIN_SAMPLE = 50
 
+# The first day of the CURRENT judge (context_version 3): 2026-08-28, when the
+# judge moved from claude-sonnet-5 to the self-hosted qwen3.8-27b (config.yaml
+# backtest.judge_model). Rows before it were judged by a different model, so a
+# fit that included them would describe neither judge. The first judged buy on
+# or after this date is 2026-08-31 (the judge was unreachable 2026-08-20..30,
+# so those days carry fallback rows only, which are excluded anyway).
+#
+# Bump it in the SAME change that bumps context_version, so the default window
+# always starts where the current judge does.
+DEFAULT_SINCE = "2026-08-28"
 
-def collect(ledger_path: str) -> tuple[list[dict], str, int]:
+
+def _since_ok(ts, since: str | None) -> bool:
+    """True when a row's timestamp is on or after `since` (a YYYY-MM-DD day).
+
+    Compared on the date part as a string: every ledger `ts` is ISO-8601 UTC,
+    so "2026-08-28T13:35..."[:10] >= "2026-08-28" is exact, and no timezone
+    parsing can move a row across the boundary. A row with no `ts` cannot say
+    which judge saw it, so with a window set it is OUT, never in.
+    """
+    if since is None:
+        return True
+    return isinstance(ts, str) and ts[:10] >= since
+
+
+def collect(ledger_path: str, since: str | None = None
+            ) -> tuple[list[dict], str, int]:
     """Every buy decision ACTUALLY JUDGED, plus the ledger's sha and the count
     of fallback rows excluded.
+
+    `since` (YYYY-MM-DD, inclusive) keeps only rows judged on or after that
+    day, and the fallback count is taken inside the same window. None = the
+    whole ledger, which is what this function did before 2026-11-04 and what a
+    caller that names no window still gets. The CLI passes DEFAULT_SINCE.
+    The sha is always of the WHOLE file, so it still identifies the input.
 
     The exclusion was added 2026-08-21 and it is not cosmetic. Until then this
     filter took any row with a truthy `llm_review`, which includes the fallback
@@ -84,7 +121,7 @@ def collect(ledger_path: str) -> tuple[list[dict], str, int]:
                 continue
             r = json.loads(raw)
             if (r.get("type") == "decision" and r.get("action") == "buy"
-                    and r.get("llm_review")):
+                    and r.get("llm_review") and _since_ok(r.get("ts"), since)):
                 if is_fallback_review(r["llm_review"]):
                     n_degraded += 1
                     continue
@@ -154,15 +191,27 @@ def main() -> int:
     p.add_argument("--write", action="store_true",
                    help=f"write {os.path.relpath(OUT, ROOT)} (default: print only)")
     p.add_argument("--ledger", default=LEDGER)
+    p.add_argument("--since", default=DEFAULT_SINCE, metavar="YYYY-MM-DD",
+                   help=f"only rows judged on or after this day (default "
+                        f"{DEFAULT_SINCE}, the current judge's first day)")
     args = p.parse_args()
+    try:
+        datetime.strptime(args.since, "%Y-%m-%d")
+    except ValueError:
+        print(f"--since must be YYYY-MM-DD, got {args.since!r}", file=sys.stderr)
+        return 2
 
     if not os.path.exists(args.ledger):
         print(f"no ledger at {args.ledger}", file=sys.stderr)
         return 2
 
-    rows, sha, n_degraded = collect(args.ledger)
+    rows, sha, n_degraded = collect(args.ledger, since=args.since)
     cal = calibrate(rows)
     cal["source_ledger_sha256_16"] = sha
+    # The window, written into the file: `observed_from` says when the first
+    # counted row was, and this says where counting was ALLOWED to start, so a
+    # reader can tell "no rows before X" from "rows before X were refused".
+    cal["since"] = args.since
     cal["min_sample"] = MIN_SAMPLE
     # Emitted into the calibration file, not just printed. A reader six months
     # from now needs to know this number was measured on judged rows only —

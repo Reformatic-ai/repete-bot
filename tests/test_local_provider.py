@@ -200,15 +200,17 @@ def test_switching_provider_invalidates_the_judge_calibration():
     """Was `assert provider == "anthropic"` until 2026-08-28 — a pin on NOT
     having switched yet. Its docstring named what a legitimate switch owes:
     "a context_version bump and a refit, not a config edit nobody reviewed."
-    The switch happened, so the pin is now a coupling check instead of a
-    deletion: whatever the provider is, the calibration must not silently
-    claim to describe it.
+    The switch happened, so the pin became a coupling check: whatever the
+    provider is, the calibration must not silently claim to describe it.
 
-    knowledge/judge_calibration.json is fitted to ONE judge's verdict
-    distribution (downsize_rate 0.858, mean_scale 0.595 over 250 buys, none of
-    them judged by the local model). judge_model.load_calibration refuses on a
-    version mismatch — this asserts the mismatch is actually there, because a
-    guard that everyone remembers to trip is a guard that someone will forget.
+    From 2026-08-28 to 2026-11-04 the shipped calibration was the v1 fit
+    (Sonnet, mean_scale 0.595 over 250 buys) and this asserted the MISMATCH
+    was there and declared. The refit on 2026-11-04 (round-two plan, B2) is
+    the other legitimate state, and it owes something specific: the fit must
+    be stamped with the CURRENT context_version AND counted only rows judged
+    since the local model took over — `calibrate_judge.py --since`, default
+    2026-08-28. A matching version over a window that reaches back into the
+    Sonnet era would pool two judges and look exactly right.
     """
     import json as _json
 
@@ -217,16 +219,24 @@ def test_switching_provider_invalidates_the_judge_calibration():
     cfg = yaml.safe_load(open(root / "config.yaml"))
     jm = cfg["backtest"]["judge_model"]
     with open(root / "knowledge" / "judge_calibration.json") as f:
-        fitted = _json.load(f).get("fitted_context_version")
+        cal = _json.load(f)
+    fitted = cal.get("fitted_context_version")
 
     if llm_client.needs_key(cfg):
         return  # a keyed vendor judge is what the fit describes; nothing owed
 
-    assert jm["context_version"] != fitted, (
-        f"the judge runs on a self-hosted model but the calibration still "
-        f"claims version {fitted!r} — every --judge-model gate would size "
-        f"against a judge that never made these decisions")
-    assert jm["calibration_refit_pending"] is True
+    if jm["context_version"] != fitted:
+        # The mismatch state: legitimate only while DECLARED.
+        assert jm["calibration_refit_pending"] is True
+        return
+
+    switched = "2026-08-28"   # provider: local, context_version 2 -> 3
+    assert cal.get("since") and cal["since"] >= switched, (
+        f"the calibration claims version {fitted!r} (the local judge) but "
+        f"was counted from {cal.get('since')!r} — rows judged by the vendor "
+        f"model before {switched} may be pooled into it")
+    assert cal["observed_from"] >= switched, cal["observed_from"]
+    assert jm["calibration_refit_pending"] is False
 
 
 # ---- 5. preflight, driven for real ----------------------------------------

@@ -53,7 +53,14 @@ def _with(cfg, block):
 
 @pytest.fixture(scope="module")
 def cfg():
-    return bt.load_config()
+    # tsmom ON, as it shipped when GOLDEN below was taken (2026-10-28). The
+    # shipped config turned it off on 2026-11-04 (retired live by the kill,
+    # divergence #23); these goldens pin the cost OFF path against the
+    # pre-cost simulator, so the config they were taken on is restored here
+    # rather than re-taking every digest on a different ensemble.
+    c = bt.load_config()
+    c["strategies"]["tsmom"]["enabled"] = True
+    return c
 
 
 @pytest.fixture(scope="module")

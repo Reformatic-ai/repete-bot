@@ -164,8 +164,9 @@ sectors:
 #
 # Sector names are `sectors:` names, so a fund lands in the same bucket as its
 # constituents. "Broad market" is new: SPY, DIA, IWM have no single sector.
-# With max_per_sector 3 a three-name bucket can never bind on its own; it is
-# here so they are mapped, not to cap them.
+# With max_per_sector 3 a three-name bucket could never bind on its own, so
+# since 2026-11-04 `risk.sector_concentration.max_per_sector_overrides` caps it
+# at 1 — one broad index fund open at a time.
 #
 # Owner-approved assignment, 2026-11-02 plan (workstream A). A symbol in both
 # maps, or twice here, is a preflight failure (ambiguous membership makes the
@@ -234,7 +235,23 @@ strategies:            # the ensemble — deterministic signals only, LLM never 
                             # headroom to compete over: heat and concentration
                             # bound the book, not a queue for slots.
   tsmom:               # time-series momentum (Moskowitz/Ooi/Pedersen)
-    enabled: true      # PASSED gate 2026-07-15: OOS +1.45%, PF 2.56, 51 trades
+    enabled: false     # OFF 2026-11-04 (owner-approved round-two plan, B1).
+                       # RETIRED LIVE by risk.live_kill since 2026-08-20: PF
+                       # 0.45 after cost over 34 closed trades, against the
+                       # kill's 0.8 floor. It passed its gate on 2026-07-15
+                       # (OOS +1.45%, PF 2.56, 51 trades) and the live record
+                       # did not repeat it. Live, this changes no trade — the
+                       # kill already refused every tsmom entry (after the
+                       # judge had spent a call on it) and the entry loop moves
+                       # on to the next strategy either way. Its open
+                       # positions still EXIT and still trail (ownership rule;
+                       # trailing_strategies is keyed by owner, not by
+                       # enabled). What it does change is every BACKTEST:
+                       # until now each one traded tsmom to the end of the
+                       # window while live refused it — divergence #23,
+                       # CLOSED by tests/test_live_kill_is_live_only.py.
+                       # Re-enabling needs a fresh gate pass AND that test
+                       # rewritten on purpose.
     priority: 2        # (exposure-matched benchmark; see research/trials.jsonl)
     momentum_bars: 63  # in-sample grid winner — never re-picked after OOS
     skip_bars: 0
@@ -868,18 +885,38 @@ risk:                  # ---- HARD RAILS: enforced in deterministic code ----
                                  # miss a sector that has only just started
                                  # moving together).
                                  #
-                                 # A symbol in NO sector is unconstrained here.
-                                 # Until 2026-11-02 that was 15 of the 38 core
-                                 # names (AVGO, QQQ, XLK, ...), so the cap
-                                 # missed the Oct 9-14 tech cluster;
-                                 # `core_sectors:` now maps all 38, and the cap
-                                 # binds on ma_crossover/tsmom/meanrev too.
+                                 # A symbol in NO sector was unconstrained
+                                 # here until 2026-11-04. Until 2026-11-02 that
+                                 # was 15 of the 38 core names (AVGO, QQQ,
+                                 # XLK, ...), so the cap missed the Oct 9-14
+                                 # tech cluster; `core_sectors:` now maps all
+                                 # 38. From 2026-11-04 an unmapped entry is
+                                 # REFUSED (rail `sector_unmapped`), so a name
+                                 # the cap cannot count can no longer pass as
+                                 # "checked and under the cap" — today that
+                                 # touches only news nominations outside both
+                                 # maps.
                                  #
                                  # 3 is PRE-REGISTERED, not fitted: it is the
                                  # top of the owner's stated 2-3 range. Which of
                                  # this and correlation_cap binds first is a
                                  # MEASUREMENT the DIAGNOSTIC makes, not a guess
                                  # to be argued about now.
+    max_per_sector_overrides:    # 2026-11-04 (owner-approved round-two
+      Broad market: 1            # plan, B4). SPY, DIA and IWM are three
+                                 # tickers on one bet — the US index — and at
+                                 # the global 3 a three-name bucket can never
+                                 # bind, so the map put them in a sector
+                                 # without capping them. 1 = at most one broad
+                                 # index fund open. Read by risk.sector_cap
+                                 # (pure_checks + rail_census; the simulator
+                                 # shares it). Preflight refuses an unknown
+                                 # sector or a value above max_per_sector: an
+                                 # override may only TIGHTEN.
+                                 #
+                                 # And since 2026-11-04 a symbol in NO sector
+                                 # is REFUSED (rail `sector_unmapped`), not
+                                 # waved through uncounted — see below.
   correlation_cap:               # CORRELATION HEAT CAP (2026-07-21, EastEquity review):
     enabled: true                # "co-moving names are one bet." A new buy is blocked
     lookback: 60                 # when >= max_correlated open positions have >= threshold
@@ -1088,8 +1125,11 @@ llm:                   # optional judgment layer (Anthropic API)
                        # different disposition — scale 0.3-0.5 where the
                        # fitted Claude distribution sits at mean_scale 0.595.
                        # That is a reason to distrust the calibration, which
-                       # backtest.judge_model.context_version now refuses, not
-                       # a measurement of agreement.
+                       # backtest.judge_model.context_version refused until it
+                       # was re-fit on this judge's own rows (2026-11-04: mean
+                       # scale 0.485, veto 37.4%), not a measurement of
+                       # agreement — #25 is about the RECORD, which the refit
+                       # does not touch.
   base_url: http://vllm-qwen38:8000/v1   # required when provider is
                        # keyless, ignored otherwise. Container-to-container on
                        # the Bizon's `ollama-net`; nothing leaves the host, so
@@ -1514,19 +1554,28 @@ backtest:               # offline harness (src/backtest.py) — never touches th
                           # inputs were untouched — the guard would have sat
                           # there looking healthy while describing a judge that
                           # no longer existed. Widened to cover WHO reads too.
-    calibration_refit_pending: true
-                          # DECLARED, not inferred. The bump above outran the
-                          # fit, and re-earning one needs new live decisions —
-                          # the current fit took 34 days to reach n=250 against
-                          # min_sample 50, and the judge has been unreachable
-                          # since 2026-08-20. So this state lasts weeks.
+    calibration_refit_pending: false
+                          # CLEARED 2026-11-04 (owner-approved round-two plan,
+                          # B2) by the change that ran `scripts/calibrate_judge.py
+                          # --write --since 2026-08-28`: the refit counts ONLY
+                          # rows judged by qwen3.8-27b, so no Sonnet-era verdict
+                          # is pooled in. Fit: 1,710 judged buys 2026-08-31..
+                          # 2026-11-04 (25 fallback rows excluded), veto 37.4%,
+                          # 96.6% of the rest downsized, mean scale 0.485, ledger
+                          # sha 873431092fd60a84. The v1 (Sonnet) fit it replaces
+                          # had veto 4.4% and mean scale 0.595 over 250 — this
+                          # judge cuts far harder. 1,478 of the 1,710 are tsmom
+                          # buys the kill refused after judging; non-tsmom alone
+                          # read veto 40.5%, mean scale 0.500 (pooled on purpose,
+                          # as calibrate_judge.py's docstring says why).
                           #
-                          # Set back to false by the same change that runs
-                          # `scripts/calibrate_judge.py --write`. While it is
-                          # true, judge_model refuses and no gate can be scored
-                          # with --judge-model. That is correct and it is not a
-                          # workaround: the alternative is a gate that reports
-                          # numbers about a bot that does not exist.
+                          # Was true from 2026-08-28: the bump above outran the
+                          # fit, and re-earning one needed new live decisions.
+                          # Set it back to true in the same change as the next
+                          # context_version bump. While it is true, judge_model
+                          # refuses and no gate can be scored with
+                          # --judge-model — the alternative is a gate that
+                          # reports numbers about a bot that does not exist.
                           # Bump whenever the judge's verdict distribution
                           # could move: what it READS (a new context block, a
                           # changed budget, a different prompt) or WHO reads it

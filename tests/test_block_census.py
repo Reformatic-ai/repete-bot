@@ -207,6 +207,44 @@ CASES = [
                                                                 "max_per_sector": 1}),
                              "strategies": {},
                              "sectors": {"energy": ["XOM", "CVX"]}})),
+    # 2026-11-04: an unmapped entry is refused rather than waved through.
+    ("sector unmapped", dict(action="buy", symbol="NEW", qty=1, price=100.0,
+                             positions={},
+                             cfg={"risk": dict(_cfg()["risk"],
+                                               sector_concentration={"enabled": True,
+                                                                     "max_per_sector": 3}),
+                                  "strategies": {},
+                                  "sectors": {"energy": ["XOM", "CVX"]}})),
+    ("sector unmapped, but a sell", dict(action="sell", symbol="NEW", qty=1,
+                                        price=100.0, positions=_pos(NEW=500.0),
+                                        cfg={"risk": dict(_cfg()["risk"],
+                                                          sector_concentration={"enabled": True,
+                                                                                "max_per_sector": 3}),
+                                             "strategies": {},
+                                             "sectors": {"energy": ["XOM", "CVX"]}})),
+    ("sector override binds", dict(action="buy", symbol="DIA", qty=1, price=100.0,
+                                   positions=_pos(SPY=1000.0),
+                                   cfg={"risk": dict(_cfg()["risk"],
+                                                     sector_concentration={
+                                                         "enabled": True,
+                                                         "max_per_sector": 3,
+                                                         "max_per_sector_overrides":
+                                                             {"Broad market": 1}}),
+                                        "strategies": {},
+                                        "core_sectors": {"Broad market":
+                                                         ["SPY", "DIA", "IWM"]}})),
+    ("sector override, other sector", dict(action="buy", symbol="XOM", qty=1,
+                                           price=100.0, positions=_pos(CVX=1000.0),
+                                           cfg={"risk": dict(_cfg()["risk"],
+                                                             sector_concentration={
+                                                                 "enabled": True,
+                                                                 "max_per_sector": 3,
+                                                                 "max_per_sector_overrides":
+                                                                     {"Broad market": 1}}),
+                                                "strategies": {},
+                                                "sectors": {"energy": ["XOM", "CVX"]},
+                                                "core_sectors": {"Broad market":
+                                                                 ["SPY", "DIA"]}})),
 ]
 
 
@@ -263,7 +301,8 @@ def test_inapplicable_rails_are_none_not_false():
                  dict(action="sell", symbol="SPY", qty=1, price=100.0,
                       positions=_pos(SPY=500.0)))
     for entry_only in ("drawdown", "max_open_positions", "position_cap",
-                       "direction_conflict", "sector_concentration"):
+                       "direction_conflict", "sector_unmapped",
+                       "sector_concentration"):
         assert sell[entry_only] is None, f"{entry_only} should not apply to a sell"
     assert sell["desync_sell"] is False        # applies, and cleared
     assert sell["desync_cover"] is None        # a sell is not a cover

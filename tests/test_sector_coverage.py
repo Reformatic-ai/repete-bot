@@ -125,3 +125,137 @@ def test_the_cap_now_refuses_a_fourth_tech_name_from_the_core_list():
     # Twin: two open, so the third is permitted (the cap is 3, not 2).
     two = {s: {"market_value": 5_000.0} for s in ("NVDA", "AVGO")}
     risk.pure_checks("buy", "XLK", 1, 1.0, ACCOUNT, two, cfg)
+
+
+# ---- 2026-11-04 (round-two plan, B4): the two gaps the map left ------------
+#
+# 1. An UNMAPPED entry used to SKIP the count — `sector_open_count` returns 0
+#    for it and `pure_checks` only counted `if sector is not None`, so the
+#    entry passed looking checked. It is now refused, with its own rail.
+# 2. "Broad market" (SPY, DIA, IWM) was mapped but could never bind: three
+#    names under a global cap of 3. It now carries its own cap of 1 through
+#    `max_per_sector_overrides`.
+
+UNMAPPED = "PLTR"   # a plausible news nomination, in neither map
+
+
+def test_the_unmapped_example_really_is_unmapped():
+    cfg = _shipped()
+    assert sector_of(cfg, UNMAPPED) is None
+    assert UNMAPPED not in _enterable(cfg)
+
+
+def test_an_unmapped_entry_is_refused_with_its_own_rail():
+    cfg = _shipped()
+    with pytest.raises(risk.RiskRejection) as e:
+        risk.pure_checks("buy", UNMAPPED, 1, 1.0, ACCOUNT, {}, cfg)
+    assert e.value.rail == "sector_unmapped"
+    assert UNMAPPED in str(e.value) and "core_sectors" in str(e.value)
+    # Twin: a mapped name on the same empty book goes through.
+    risk.pure_checks("buy", "NVDA", 1, 1.0, ACCOUNT, {}, cfg)
+
+
+def test_a_short_entry_is_refused_too():
+    """ENTRY_ACTIONS, not just "buy": a short opens a position the cap must
+    count as much as a long does."""
+    with pytest.raises(risk.RiskRejection) as e:
+        risk.pure_checks("short", UNMAPPED, 1, 1.0, ACCOUNT, {}, _shipped())
+    assert e.value.rail == "sector_unmapped"
+
+
+def test_an_unmapped_position_can_still_be_closed():
+    """Exits are never blocked — an unmapped name already held (a nomination
+    bought before this rail existed) must still be sellable."""
+    held = {UNMAPPED: {"market_value": 5_000.0}}
+    risk.pure_checks("sell", UNMAPPED, 1, 1.0, ACCOUNT, held, _shipped())
+
+
+def test_the_rail_is_off_when_the_cap_is_off():
+    """`enabled: false` turns the whole sector rail off, unmapped check
+    included — the refusal belongs to the cap, it is not a new universe
+    filter."""
+    cfg = copy.deepcopy(_shipped())
+    cfg["risk"]["sector_concentration"]["enabled"] = False
+    risk.pure_checks("buy", UNMAPPED, 1, 1.0, ACCOUNT, {}, cfg)
+
+
+def test_the_unmapped_rail_is_registered_and_censused():
+    """Registered in PURE_RAILS so the ledger's rail census records it, and
+    ordered BEFORE the cap it protects, because an unmapped symbol has no
+    sector for the cap to look up."""
+    assert "sector_unmapped" in risk.PURE_RAILS
+    assert (risk.PURE_RAILS.index("sector_unmapped")
+            < risk.PURE_RAILS.index("sector_concentration"))
+    c = risk.rail_census("buy", UNMAPPED, 1, 1.0, ACCOUNT, {}, _shipped())
+    assert c["sector_unmapped"] is True
+    assert c["sector_concentration"] is None      # never asked, not "cleared"
+    assert risk.first_refusing_rail(c) == "sector_unmapped"
+    mapped = risk.rail_census("buy", "NVDA", 1, 1.0, ACCOUNT, {}, _shipped())
+    assert mapped["sector_unmapped"] is False
+
+
+def test_the_simulator_refuses_it_through_the_same_function():
+    """The simulator calls `risk.pure_checks` for every entry (divergence #1's
+    closure), so it cannot disagree with live about an unmapped name. Pinned by
+    source, because no snapshot entry can reach an unmapped core name today."""
+    import inspect
+
+    import backtest as bt
+    assert "risk.pure_checks(" in inspect.getsource(bt)
+    assert 'rail="sector_unmapped"' in inspect.getsource(risk.pure_checks)
+
+
+def test_broad_market_is_capped_at_one():
+    cfg = _shipped()
+    assert risk.sector_cap(cfg["risk"]["sector_concentration"],
+                           "Broad market") == 1
+    spy = {"SPY": {"market_value": 5_000.0}}
+    for second in ("DIA", "IWM"):
+        with pytest.raises(risk.RiskRejection) as e:
+            risk.pure_checks("buy", second, 1, 1.0, ACCOUNT, spy, cfg)
+        assert e.value.rail == "sector_concentration"
+        assert "Broad market" in str(e.value) and "max 1" in str(e.value)
+    # Twin: the first broad fund on a book without one goes through...
+    risk.pure_checks("buy", "DIA", 1, 1.0, ACCOUNT,
+                     {"NVDA": {"market_value": 5_000.0}}, cfg)
+    # ...and adding to SPY itself is max_position_pct's question, not this one.
+    risk.pure_checks("buy", "SPY", 1, 1.0, ACCOUNT, spy, cfg)
+
+
+def test_the_override_does_not_touch_other_sectors():
+    """Technology still caps at the global 3: two open, the third is allowed,
+    and a broad fund open does not count toward it."""
+    cfg = _shipped()
+    assert risk.sector_cap(cfg["risk"]["sector_concentration"],
+                           "Technology") == 3
+    book = {s: {"market_value": 5_000.0} for s in ("NVDA", "AMD", "SPY")}
+    risk.pure_checks("buy", "AVGO", 1, 1.0, ACCOUNT, book, cfg)
+
+
+def test_without_the_override_broad_market_falls_back_to_the_global_cap():
+    """The negative control: remove the override and DIA beside SPY passes,
+    which is the gap the override closes."""
+    cfg = copy.deepcopy(_shipped())
+    del cfg["risk"]["sector_concentration"]["max_per_sector_overrides"]
+    risk.pure_checks("buy", "DIA", 1, 1.0, ACCOUNT,
+                     {"SPY": {"market_value": 5_000.0}}, cfg)
+
+
+@pytest.mark.parametrize("over,needle", [
+    ({"Broad markt": 1}, "neither"),               # typo caps nothing
+    ({"Broad market": 0}, "int >= 1"),
+    ({"Broad market": True}, "int >= 1"),           # bool is an int in Python
+    ({"Broad market": 4}, "only tighten"),          # above the global 3
+    (["Broad market"], "mapping"),
+])
+def test_preflight_refuses_a_bad_override(over, needle):
+    import preflight
+    cfg = copy.deepcopy(_shipped())
+    cfg["risk"]["sector_concentration"]["max_per_sector_overrides"] = over
+    fails = [f for f in preflight.run(cfg) if "overrides" in f]
+    assert any(needle in f for f in fails), fails
+
+
+def test_preflight_accepts_the_shipped_override():
+    import preflight
+    assert [f for f in preflight.run(_shipped()) if "overrides" in f] == []

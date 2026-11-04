@@ -21,6 +21,7 @@ to reach n=250 against a min_sample of 50. Changing what the judge reads should
 feel expensive, because it is.
 """
 import json
+import os
 
 import pytest
 
@@ -216,3 +217,95 @@ def test_a_disabled_judge_model_still_short_circuits(tmp_path, monkeypatch):
     monkeypatch.setattr(judge_model, "_CAL_PATH", "/nonexistent.json")
     cfg = {"backtest": {"judge_model": {"enabled": False, "context_version": 9}}}
     assert judge_model.scale_for("AAPL", "2026-08-23T00:00:00", cfg) == 1.0
+
+
+# ---- the --since window (2026-11-04, round-two plan B2) --------------------
+#
+# The refit for context_version 3 must count ONLY the current judge's rows.
+# Before --since, collect() read the whole ledger, so a "v3" fit would have
+# pooled 302 Sonnet-era verdicts (veto 4.4%) with the qwen ones (veto 37%) —
+# a version stamp that matched and a distribution that described neither.
+
+def _buy(ts, scale=0.5, verdict="downsize", reasoning="Extended; halving."):
+    return {"type": "decision", "action": "buy", "ts": ts,
+            "llm_review": {"verdict": verdict, "scale": scale,
+                           "reasoning": reasoning}}
+
+
+def _ledger(tmp_path, rows):
+    p = tmp_path / "ledger.jsonl"
+    p.write_text("".join(json.dumps(r) + "\n" for r in rows))
+    return str(p)
+
+
+def test_since_drops_rows_judged_before_the_window(tmp_path):
+    import llm
+    calibrate_judge, _ = _calibrate_judge()
+    rows = [_buy("2026-08-27T19:59:00+00:00", 1.0, "approve"),   # Sonnet era
+            _buy("2026-08-28T00:00:01+00:00", 0.5),             # first day
+            _buy("2026-09-02T13:35:00+00:00", 0.3),
+            _buy("2026-08-25T13:35:00+00:00", 1.0, "approve",
+                 llm.FALLBACK_REASONING),                        # degraded, before
+            _buy("2026-09-03T13:35:00+00:00", 1.0, "approve",
+                 llm.FALLBACK_REASONING)]                        # degraded, inside
+    path = _ledger(tmp_path, rows)
+
+    kept, _, degraded = calibrate_judge.collect(path, since="2026-08-28")
+    assert [r["ts"][:10] for r in kept] == ["2026-08-28", "2026-09-02"]
+    assert degraded == 1, "the fallback count must be taken inside the window"
+
+    # The twin: no window is the old whole-ledger behaviour, unchanged.
+    every, _, degraded_all = calibrate_judge.collect(path)
+    assert len(every) == 3 and degraded_all == 2
+
+
+def test_a_row_with_no_timestamp_is_out_of_a_window(tmp_path):
+    """It cannot say which judge saw it, so it must not be counted as the
+    current one's."""
+    calibrate_judge, _ = _calibrate_judge()
+    row = _buy("2026-09-01T00:00:00+00:00")
+    del row["ts"]
+    kept, _, _ = calibrate_judge.collect(_ledger(tmp_path, [row]),
+                                         since="2026-08-28")
+    assert kept == []
+
+
+def test_the_cli_defaults_to_the_local_judges_first_day(tmp_path):
+    """The default is the switch date, and the window is written into the
+    output so a reader can tell "no rows before X" from "rows refused"."""
+    import subprocess
+    import sys
+    calibrate_judge, root = _calibrate_judge()
+    assert calibrate_judge.DEFAULT_SINCE == "2026-08-28"
+    path = _ledger(tmp_path, [_buy("2026-08-20T13:35:00+00:00"),
+                              _buy("2026-09-01T13:35:00+00:00")])
+    out = subprocess.run([sys.executable,
+                          os.path.join(root, "scripts", "calibrate_judge.py"),
+                          "--ledger", path],
+                         capture_output=True, text=True, cwd=root)
+    assert "n_judged_buys: 1" in out.stdout, out.stdout
+    assert "since: 2026-08-28" in out.stdout, out.stdout
+
+
+def test_a_malformed_since_is_refused(tmp_path):
+    import subprocess
+    import sys
+    _, root = _calibrate_judge()
+    out = subprocess.run([sys.executable,
+                          os.path.join(root, "scripts", "calibrate_judge.py"),
+                          "--ledger", _ledger(tmp_path, [_buy("2026-09-01")]),
+                          "--since", "Aug 28"],
+                         capture_output=True, text=True, cwd=root)
+    assert out.returncode == 2
+    assert "YYYY-MM-DD" in out.stderr
+
+
+def test_the_shipped_fit_was_counted_inside_its_window():
+    """The pair that runs: the shipped calibration's first counted row is on
+    or after the window it declares."""
+    import os as _os
+    root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+    cal = json.load(open(_os.path.join(root, "knowledge",
+                                       "judge_calibration.json")))
+    assert cal.get("since"), "the shipped fit does not say what window it used"
+    assert cal["observed_from"] >= cal["since"]

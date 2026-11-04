@@ -149,13 +149,18 @@ def test_priority_order_decides_who_claims_a_symbol(bars):
     """Two strategies wanting the same symbol: the higher-priority one wins.
     This is the live rule (main.py 'first buy that survives review + rails takes
     ownership') and it is the mechanism that starves low-priority strategies."""
+    # tsmom is OFF in the shipped config since 2026-11-04 (retired live by the
+    # kill, #23). This test is about the contention MECHANISM, so it turns the
+    # pair on explicitly rather than relying on what ships.
     cfg = bt.load_config()
+    cfg["strategies"]["tsmom"]["enabled"] = True
     cfg["strategies"]["meanrev"]["priority"] = 1
     cfg["strategies"]["tsmom"]["priority"] = 2
     first = bt.simulate_ensemble(bars, cfg, 100_000.0)
     by_first = first.params["by_strategy"]
 
     cfg2 = bt.load_config()
+    cfg2["strategies"]["tsmom"]["enabled"] = True
     cfg2["strategies"]["meanrev"]["priority"] = 9
     cfg2["strategies"]["tsmom"]["priority"] = 1
     second = bt.simulate_ensemble(bars, cfg2, 100_000.0)
@@ -242,8 +247,17 @@ def test_entry_priority_is_the_gated_order():
     order so a future session cannot reinstate it without re-gating."""
     cfg = bt.load_config()
     order = [n for n, _ in strategies.enabled(cfg)]
-    assert order == ["ma_crossover", "tsmom", "meanrev"], (
-        f"entry priority is {order}; §22 gated ma_crossover -> tsmom -> meanrev")
+    # tsmom left the ENABLED list on 2026-11-04 (retired live by the kill,
+    # divergence #23) — its priority did not move, so the gated order still
+    # holds among the strategies that enter.
+    assert order == ["ma_crossover", "meanrev"], (
+        f"entry priority is {order}; §22 gated ma_crossover -> tsmom -> "
+        f"meanrev, and tsmom is off")
+    pri = {n: cfg["strategies"][n]["priority"]
+           for n in ("ma_crossover", "tsmom", "meanrev")}
+    assert pri["ma_crossover"] < pri["tsmom"] < pri["meanrev"], (
+        f"priorities {pri} no longer encode §22's ma_crossover -> tsmom -> "
+        f"meanrev")
 
 
 def test_trade_cap_is_a_runaway_guard_not_a_risk_rail():

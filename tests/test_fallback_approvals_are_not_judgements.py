@@ -128,7 +128,9 @@ def test_calibrate_judge_excludes_fallbacks_from_the_haircut(tmp_path):
 
     out = subprocess.run(
         [sys.executable, str(ROOT / "scripts" / "calibrate_judge.py"),
-         "--ledger", str(ledger)],
+         # --since: the rows are dated before the default window (the local
+         # judge's first day, 2026-08-28), and the window is not this test.
+         "--ledger", str(ledger), "--since", "2026-08-01"],
         capture_output=True, text=True, cwd=str(ROOT))
 
     # It exits 1 below MIN_SAMPLE, which is correct and not what we're testing.

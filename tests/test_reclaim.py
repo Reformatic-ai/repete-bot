@@ -174,14 +174,22 @@ def test_the_cap_never_blocks_an_exit():
     risk.pure_checks("sell", "AA1", 1, 1.0, ACCOUNT, positions, cfg)
 
 
-def test_the_cap_is_inert_for_unmapped_symbols():
-    """The core universe carries no sector map, so a book of core names can
-    exceed any per-sector number without the rail firing. This is the property
-    that lets the rail ship without re-gating ma_crossover, tsmom or meanrev."""
+def test_an_unmapped_symbol_is_refused_not_waved_through():
+    """INVERTED 2026-11-04 (round-two plan, B4). This test was
+    `test_the_cap_is_inert_for_unmapped_symbols`: when it was written the core
+    universe carried no sector map, and an unmapped name passed the cap
+    uncounted — the property that let the rail ship without re-gating the
+    core strategies. Since 2026-11-02 every core name is mapped, and an entry
+    the cap cannot count is now REFUSED with its own rail, because "unmapped"
+    and "checked and under the cap" looked identical from outside (the
+    October AVGO/QQQ/XLK cluster). tests/test_sector_coverage.py owns the
+    rest of it."""
     cfg = _sector_cfg(1)
     positions = {"CORE1": {"market_value": 1_000.0},
                  "CORE2": {"market_value": 1_000.0}}
-    risk.pure_checks("buy", "CORE1", 1, 1.0, ACCOUNT, positions, cfg)
+    with pytest.raises(risk.RiskRejection) as e:
+        risk.pure_checks("buy", "CORE3", 1, 1.0, ACCOUNT, positions, cfg)
+    assert e.value.rail == "sector_unmapped"
 
 
 def test_disabling_the_cap_restores_the_prior_behaviour():

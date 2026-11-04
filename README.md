@@ -34,8 +34,8 @@ Reformatting is deliberately *not* tampering: the hash tracks meaning, so a
 freeze that cried wolf would be one people learned to bypass.
 
 **A divergence register.** `docs/divergences.md` lists every place the simulator
-and the live bot were found to differ — **27 as of 2026-11-03**, fifteen closed
-by a **named test** and twelve open, because "fixed in code" has been
+and the live bot were found to differ — **27 as of 2026-11-04**, sixteen closed
+by a **named test** and eleven open, because "fixed in code" has been
 wrong here before. Three of them were found within four days by reading code for
 an adjacent task, which is the honest reason the file does not claim to be
 complete.

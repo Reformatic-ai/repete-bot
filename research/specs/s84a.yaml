@@ -1,0 +1,158 @@
+# §84a — DIAGNOSTIC: s81a's trail_ma arm on the bot that actually runs —
+#         tsmom off, the judge simulated, after cost (2022-2026)
+#
+# WHY NOW. The owner-approved round-two plan (2026-11-04, workstream B3) asks
+# for "one pre-registered spec, report only: the ma_crossover trailing stop vs
+# live, with tsmom off and the judge simulated, after cost". The plan called it
+# s81b. It is s84a because this repo files a spec under the section its id
+# names (src/recall.py `section_of_spec_id`): s81b would join §81, whose body
+# and recall trailer are closed, and the record is append-only. Same test,
+# written up as §84.
+#
+# WHAT s81a FOUND. trail_ma (the tsmom chandelier, 3.0 x ATR14 from the high
+# since entry, ratchets up only, extended to ma_crossover) beat the live setup
+# on every number — +140.39% vs +121.77%, PF 1.794 vs 1.755, maxDD 9.58% vs
+# 9.88% — and failed only (d): +$7.17/trade, 99.69% CI [-$40.80, +$55.57], 626
+# shared trades. "Directionally better, not distinguishable from noise."
+#
+# WHAT s81a COULD NOT MODEL, AND THIS DOES:
+#   1. tsmom OFF. s81a's baseline traded tsmom to the end of the window; live
+#      has refused every tsmom entry since 2026-08-20 (risk.live_kill, PF 0.45
+#      after cost over 34 trades). Divergence #23, closed 2026-11-04 by
+#      `strategies.tsmom.enabled: false`. Set in `shared:` below as well, so
+#      it is in THIS spec's hash and not only in config.yaml (which is not).
+#   2. THE JUDGE SIMULATED. s81a ran judge-off because the calibration
+#      refused (fitted for context_version 1). It was re-fit on 2026-11-04 on
+#      qwen3.8-27b's own rows only (calibrate_judge.py --since 2026-08-28):
+#      1,710 judged buys 2026-08-31..2026-11-04, veto 37.4%, mean scale 0.485
+#      on the rest, ledger sha 873431092fd60a84. judge_model draws each entry's
+#      verdict from that distribution by a hash of (symbol, ts, salt judge-v1),
+#      so both arms see the SAME verdict on the same signal.
+#   3. THE SECTOR CAP AS SHIPPED. An unmapped entry is now refused
+#      (`sector_unmapped`, code) and "Broad market" (SPY, DIA, IWM) caps at 1
+#      (config; set in `shared:` too). The ensemble only enters the 38 core
+#      names, all mapped, so only the Broad-market cap can bind here.
+#
+# THE BASELINE IS THE LIVE SETUP: config.yaml on branch round2-repete (the
+# commit is named in the §84 write-up) plus `shared:` below. trail_ma differs
+# from it in ONE key.
+#
+# REPORT ONLY. DIAGNOSTIC decides nothing and licenses nothing (run_gate.py).
+# Nothing is switched; the numbers go to the owner, and any switch is his
+# ("Strategy switches go back to him with numbers first").
+#
+# VENUE, COST, K: as s81a, so the two read side by side. §43d's wide
+# 2022-01-01..2026-07-24 snapshot (entries limited to the 38 core names); the
+# live console's equities block, equal to cost_models.RECOMMENDED; K closed at
+# 16 (DIAGNOSTIC spends none; the paired clause uses the family-wise 16).
+id: s84a
+claim: DIAGNOSTIC
+title: "s81a's trailing stop on ma_crossover vs the live ensemble — tsmom off, judge simulated, after cost (2022-2026)"
+
+judge_model: true
+
+operator_costs:
+  equities: {model: per_share, flat_per_order: 1.0, per_share: 0.005,
+             min_per_order: 1.0, max_pct_of_value: 1.0}
+  options:  {model: per_contract, flat_per_order: 1.4, per_contract: 0.65,
+             fees_per_contract: 0.025, min_per_order: 1.0}
+  fx:       {model: per_10k_units, flat_per_order: 1.0, per_10k_units: 1.0,
+             spread_pips: 0.2}
+  crypto:   {model: percent, flat_per_order: 1.0, pct_of_value: 0.8}
+
+snapshot:
+  path: data/snapshots/bars_wide_2022-01-01_2026-07-24.json.gz
+  sha256: 081dc08727a8cd8e1dc4726625b1fab02cb3b7d8c1489849a69327950c4adc8d
+
+cash: 100000.0
+
+bonferroni_k: 16
+
+# Both arms. Pinned here because config.yaml is not in the spec hash: a later
+# config edit must not be able to move what this spec measured.
+shared:
+  set:
+    strategies.tsmom.enabled: false
+    risk.sector_concentration.max_per_sector_overrides: {Broad market: 1}
+
+arms:
+  - name: baseline
+  # s81a's arm, unchanged: the chandelier trail, exactly as tsmom runs it,
+  # extended to ma_crossover. No new parameter. tsmom stays in the list so the
+  # arm is byte-for-byte s81a's; with tsmom off it owns nothing, so it is inert.
+  - name: trail_ma
+    set:
+      risk.brackets.trailing_strategies: [tsmom, ma_crossover]
+
+candidate: trail_ma
+
+clauses:
+  # Enough closed trades that (b)-(d) are not read off a handful.
+  - {id: a, rule: min_trades, n: 30}
+  # The arm makes more per unit lost than the live setup, after cost.
+  - {id: b, rule: pf_gt_baseline}
+  # And does not buy that with a deeper hole: maxDD within 1pp of live's.
+  - {id: c, rule: maxdd_within, pp: 1.0}
+  # The improvement is not noise: paired on common trades (§55), K=16.
+  - {id: d, rule: significantly_better_paired}
+
+prior: >-
+  I EXPECT trail_ma TO FAIL, AND I NAME THE CLAUSE: (d), as in s81a. The
+  simulated judge vetoes about 37% of entries and halves most of the rest, so
+  the per-trade dollar differences shrink with position size and the sample
+  is smaller than s81a's 916-1,002 trades; a CI that already spanned zero
+  at about $96 wide does not narrow enough to clear K=16. Expected verdict:
+  FAILS on (d), with (a) passing.
+
+  On the rest. (a): passes comfortably; I expect several hundred closed
+  trades, fewer than s81a because tsmom is gone and the judge vetoes.
+  (b): I expect trail_ma's PF to stay at or above baseline (s81a +0.039), but
+  with tsmom removed the trail touches a larger share of the book (ma_crossover
+  owns more of it), so the effect could go either way in size; I lean PASS
+  and will not pretend it is more than a lean. (c): PASSES — the trail only
+  adds exits, and in s81a it lowered maxDD. Second-order effect named in
+  advance, carried over from s81a: a raised stop shrinks open stop-risk and
+  frees heat budget, so trail_ma may take MORE entries than baseline; with
+  half-size judged positions the heat cap binds less often, so I expect that
+  effect to be SMALLER than s81a's (379 -> 80 heat refusals).
+
+  READING RULE, frozen before the run (s81a's, unchanged). An arm that clears
+  all four is reported to the owner as "better than live on this venue, after
+  cost, judge simulated" — still DIAGNOSTIC: it licenses no config change by
+  itself; the owner decides. Clearing (b) and (c) but not (d) is reported as
+  "directionally better, not distinguishable from noise" and is NOT a reason
+  to switch. Failing (b) or (c) is reported as "no better than live" for this
+  question. Either way it is not evidence about the live record's own days.
+  The verdict row and both arms are appended; nothing is re-run.
+
+failure_modes:
+  - >-
+    THE JUDGE IS A DISTRIBUTION, NOT A JUDGE. judge_model reproduces how
+    often and how much the live judge cuts, pooled over all strategies; it
+    cannot know WHICH entries the real judge would have cut, and the live
+    judge's veto rate on ma_crossover alone (n=67) was 72% against the pooled
+    37%. An exit rule's value depends on which entries exist, so the
+    simulated book is still not the live book.
+  - >-
+    THE FIT IS 86% tsmom ROWS. 1,478 of the 1,710 judged buys were tsmom
+    signals the kill refused after judging. Pooled on purpose (calibrate_judge
+    refuses to fit per strategy); non-tsmom alone read veto 40.5%, mean scale
+    0.500, close to the pooled figures. Both arms carry the same draw.
+  - >-
+    SURVIVORSHIP. The 38 names are in config.yaml because they are today's
+    large caps (§48, §51). Both arms carry it equally, so it biases levels
+    more than the difference — but a trend-following exit measured on
+    survivors is measured on trends that kept going.
+  - >-
+    ONE VENUE, ONE REGIME SET. 2022-2026 is one bear year and three up years.
+    No second period is run; a result here does not generalise to a sideways
+    market, and this spec does not claim it does.
+  - >-
+    NOT COMPARABLE TO s81a's LEVELS. Three things moved at once (tsmom off,
+    judge on, Broad-market cap). This spec answers "trail vs no trail on the
+    bot that runs", not "what did each change do"; the two baselines must not
+    be differenced as if one change explained the gap.
+  - >-
+    The trail on a SHORT is unimplemented (backtest.py raises). ma_crossover is
+    long-only in config, so this cannot fire here; if it did, the run aborts
+    rather than mis-scores.

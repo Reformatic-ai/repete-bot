@@ -79,10 +79,11 @@ it does not, the verdict measures a bot that does not exist.
 reopened.** "Fixed in code" is not closed; this repo has been wrong about that
 distinction before. **Open by construction** means the gap cannot be closed by
 any assertion — e.g. the paper broker charges no borrow cost, so no test can
-detect a real one. **Nine of twenty-four are open, and not all by
-construction** — #19 is a plain omission (a live filter switched off in every
-gate) and #23 is a live rail the simulator never modelled. "Open by
-construction" is the reason for six of them, not a synonym for "open".
+detect a real one. **Eleven of twenty-seven are open (2026-11-04), and not
+all by construction** — #19 is a plain omission (a live filter switched off in
+every gate). #23, a live rail the simulator never modelled, was the other
+exception until 2026-11-04, when config turned off the strategy it had retired.
+"Open by construction" is the reason for ten of them, not a synonym for "open".
 
 **Fail-open vs fail-closed** — which way a guard errs when it cannot verify
 something. **Fail-closed** refuses to trade (preflight, the freshness rail, the
@@ -96,8 +97,9 @@ differently.
 backtester call the *same function*, which is how five early divergences were
 pre-empted rather than fixed. **That is not true of every rail**: `live_kill`
 is in `src/risk.py`, refuses entries, and the backtester does not call it at
-all — divergence #23. Read the shared-implementation guarantee as covering
-`pure_checks`, not the file.
+all — divergence #23 (closed 2026-11-04 by disabling the one strategy it had
+retired, not by modelling it). Read the shared-implementation guarantee as
+covering `pure_checks`, not the file.
 
 **Rail label** — which check refused an entry, recorded on the ledger decision:
 `datacheck` (the two price vendors disagree), `universe` (too few symbols have

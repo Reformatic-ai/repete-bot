@@ -9,7 +9,7 @@ prose scattered across forty sections of the gate ledger** — there was no list
 so "how many are open?" had no answer, and #8 could sit closed-on-paper and open
 in fact for three days without anyone noticing. This file is the list.
 
-**Open as of 2026-11-03: #13, #14, #15, #16, #18, #19, #21, #23, #24, #25, #26 and #27.** Ten of the twelve
+**Open as of 2026-11-04: #13, #14, #15, #16, #18, #19, #21, #24, #25, #26 and #27.** Ten of the eleven
 are open *by construction* rather than by defect — a sampling fact about the live
 record, two judge inputs the simulator has no mechanism to represent, a cost the
 paper broker does not charge, a fill-session hazard that only materialises when
@@ -17,13 +17,15 @@ the cycle runs long, a scanner that tests a live quote where the simulator
 tests a completed close, a judge whose identity changed with no baseline
 left to compare it against, an operator cost the gates pin while live
 charges whatever the console says today, and an entry cost filter (off by
-default) that only the live bot has. **#19 and #23 are not.** #19 is a plain
+default) that only the live bot has. **#19 is not.** #19 is a plain
 omission, found 2026-08-09, in which a live entry filter has been silently
 switched off in every gate ever run because no spec supplies the data it needs.
-**#23 is a third kind again** — a live rail the simulator never modelled, whose
+**#23 was a third kind again** — a live rail the simulator never modelled, whose
 absence was *intended* (it is the live-side backstop §10 leaned on in writing)
-and therefore never looked for. It is binding right now: one of the three
-enabled strategies is retired live and fully active in every simulation. **#17 and #20 are
+and therefore never looked for. It was binding from 2026-08-20 to 2026-11-04:
+one of the three enabled strategies was retired live and fully active in every
+simulation. It CLOSED when config.yaml turned that strategy (tsmom) off, so the
+simulator and live now enter the same strategies. **#17 and #20 are
 DEFECTS, each found and closed the same day.** #17 is the largest correction
 here: the simulator let every strategy enter every symbol in the snapshot. #20
 is the subtler shape — live and the simulator keyed the re-entry cooldown
@@ -67,7 +69,7 @@ code" is not closed; the repo has been wrong about that before.
 | 20 | The re-entry cooldown was keyed by symbol in live, by (strategy, symbol) in the simulator | closed | `tests/test_cooldown_key_matches_sim.py` |
 | 21 | **The live swing scanner fills inside the entry zone intraday; the simulator fills at the next open** | **open** | open by construction — the 30-min scan tests a live quote, the cycle and every §62 arm test the last completed close |
 | 22 | The test suite paged the operator — `watchdog.load_env()` fell back to the repo-root `.env`, so the alert-delivery negative control posted real alerts | closed | `tests/test_alert_delivery.py::test_load_env_NEVER_reaches_the_operators_real_dotenv` |
-| 23 | **The live kill retires a strategy's entries; the simulator has never modelled it** | **open** | found 2026-08-23; `tests/test_live_kill_is_live_only.py` pins the gap in both directions but does not close it — see the entry |
+| 23 | **The live kill retires a strategy's entries; the simulator has never modelled it** | **closed 2026-11-04** | `tests/test_live_kill_is_live_only.py::test_every_strategy_the_kill_retired_is_disabled` — tsmom (retired live 2026-08-20) is `enabled: false`, so neither side enters it; a second kill reopens it for that strategy — see the entry |
 | 24 | **The live judge reads a per-symbol research dossier; the simulator models the judge as a distribution and cannot represent one** | **open** | open by construction — registered 2026-08-23 by the change that caused it; the calibration refuses until re-fit |
 | 25 | **The judge is a different model (`qwen3.8-27b`, self-hosted) and no measurement compares it to the one whose record the bot carries** | **open** | open by construction — registered 2026-08-28 by the change that caused it; the shadow baseline needs the vendor that ran out, which is why the switch happened |
 | 26 | **The operator's cost: gates charge a PINNED research block on every fill; live charges the console's current setting** (item 2, live never charging a short's opening order, closed 2026-10-28) | **open** | open by construction — registered 2026-10-28 by the change that caused it (the owner's after-cost decision); `tests/test_after_cost_backtest.py` pins the sim side, `tests/test_after_cost_rails.py` the live side; item 2 closed by `tests/test_operator_settings.py` (short opens) |
@@ -1056,6 +1058,48 @@ made while writing a register entry.
 simulator does not call it, the live path does — so the register cannot drift
 from the code in silence. That test does not close this entry. It makes the
 entry falsifiable, which is a different thing.
+
+### CLOSED 2026-11-04 — by turning tsmom off, not by wiring the kill in
+
+**Owner-approved round-two plan (2026-11-04, B1):** set
+`strategies.tsmom.enabled: false`. The kill had been refusing every tsmom entry
+since 2026-08-20; on 2026-11-04 it read **34 closed trades, PF 0.45 after
+operator cost** (measured with `risk.live_kill_blocked` on the Bizon's ledger).
+So the flip changes **no live trade**:
+
+- live, a tsmom buy was judged (one model call), then refused by the kill, and
+  the entry loop moved on to the next strategy (`main.py`: only an EXECUTED
+  entry `break`s the loop). With tsmom off, the loop skips it and reaches the
+  same next strategy without the model call;
+- tsmom's open positions still exit through tsmom and still trail (ownership
+  rule; `trailing_strategies` is keyed by the owner, not by `enabled`).
+
+What it changes is the **simulator**: `simulate_ensemble` enters only
+`strategies.enabled(cfg)`, so from this commit no backtest trades tsmom. That
+is the divergence, closed in the direction "What would close this" left open:
+the simulator still has no in-run kill, and does not need one for a strategy
+that neither side enters.
+
+**What this moves.** `run_gate.py` reads config.yaml, which is not in any spec's
+hash. So a re-run of any EARLIER registration from this commit on scores a
+baseline without tsmom, and will not reproduce its verdict row. That is the
+cost the entry above named; it is paid here on purpose, once, instead of by
+silently re-scoring under an in-run kill. Every verdict row already appended
+stands as written (append-only), and each was produced by the checkout its
+write-up names. New specs say `strategies.tsmom.enabled: false` in every arm
+(s81b does), so their own hash carries it.
+
+**Closed by** `tests/test_live_kill_is_live_only.py::test_every_strategy_the_kill_retired_is_disabled`,
+with its twin `test_the_closing_test_can_fail` and the consumer check
+`test_the_simulator_enters_no_retired_strategy`. `RETIRED_LIVE` in that file is
+the list; it names tsmom and the date the kill first fired.
+
+**It can reopen, and the shape is known.** The asymmetry in code is unchanged:
+the day the kill retires a SECOND strategy (ma_crossover read 8 closed trades,
+PF 0.00 on 2026-11-04, under the 15-trade floor), #23 is open again for that
+strategy until config says so too. The AST tests above stay for that reason.
+The open question below (should the enablement gate apply a PF floor to
+simulated trades?) is still undecided and still needs its own registration.
 
 ---
 

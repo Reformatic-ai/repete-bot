@@ -1546,6 +1546,24 @@ def sector_open_count(cfg: dict, symbol: str, positions: dict) -> int:
                if s != symbol and sector_of(cfg, s) == sector)
 
 
+def sector_cap(scfg: dict, sector: str):
+    """The open-position cap for ONE sector: its entry in
+    `max_per_sector_overrides`, else the global `max_per_sector`.
+
+    THE single lookup, called by `pure_checks` and `rail_census` alike, for the
+    reason `sector_open_count` gives: a cap read in two places is how the two
+    would come to disagree. Added 2026-11-04 (round-two plan, B4) for "Broad
+    market": SPY, DIA and IWM are three tickers on one index bet, and with the
+    global cap of 3 a three-name bucket could never bind on its own (config.yaml
+    said so). preflight refuses an override that would LOOSEN the global cap,
+    so this can only ever tighten a sector.
+    """
+    over = scfg.get("max_per_sector_overrides") or {}
+    if sector in over:
+        return over[sector]
+    return scfg.get("max_per_sector")
+
+
 def pure_checks(action: str, symbol: str, qty: int, price: float,
                 account: dict, positions: dict, cfg: dict,
                 regime_label: str | None = None,
@@ -1754,14 +1772,25 @@ def pure_checks(action: str, symbol: str, qty: int, price: float,
     # SECTOR CONCENTRATION. Entries only; an exit must never be blocked.
     scfg = r.get("sector_concentration") or {}
     if action in ENTRY_ACTIONS and scfg.get("enabled"):
-        cap = scfg.get("max_per_sector")
         sector = sector_of(cfg, symbol)
-        # An UNMAPPED symbol is unconstrained. Since 2026-11-02 every core name
-        # is mapped (`sectors:` + `core_sectors:`), so this binds on the whole
-        # core book; what stays unmapped is a news nomination outside it.
-        # Treating "no sector" as a sector would instead lump every unmapped
-        # name together under one cap.
-        if cap and sector is not None:
+        # An UNMAPPED symbol is REFUSED (2026-11-04, round-two plan B4). It
+        # used to be unconstrained: `sector_open_count` returns 0 for it, so
+        # the cap SKIPPED the count and the entry went through looking checked.
+        # That is how AVGO/QQQ/XLK joined NVDA/AMD on 2026-10-09..14 unseen
+        # (all five stopped out, -$1,527). Since 2026-11-02 every core name is
+        # mapped (`sectors:` + `core_sectors:`), so this refuses only what the
+        # cap cannot count — today a news nomination outside both maps, or a
+        # disabled strategy's fund (swing_sectors' XLI..XLC) if it were ever
+        # enabled unmapped. Lumping every unmapped name under one pseudo-
+        # sector instead would cap unrelated names together; refusing is the
+        # direction that can only remove an entry.
+        if sector is None:
+            raise RiskRejection(
+                f"no sector for {symbol}: the sector cap cannot count it, so "
+                f"the entry is refused — map it in config.yaml `core_sectors:`",
+                rail="sector_unmapped")
+        cap = sector_cap(scfg, sector)
+        if cap:
             n = sector_open_count(cfg, symbol, positions)
             if n >= cap:
                 raise RiskRejection(
@@ -1779,7 +1808,7 @@ def pure_checks(action: str, symbol: str, qty: int, price: float,
 PURE_RAILS = ("zero_qty", "order_value_cap", "drawdown", "max_open_positions",
               "strategy_slots", "position_cap", "regime_exposure",
               "net_exposure", "desync_sell", "desync_cover",
-              "direction_conflict", "sector_concentration")
+              "direction_conflict", "sector_unmapped", "sector_concentration")
 
 # Rails that live OUTSIDE pure_checks and are deliberately NOT censused, each
 # for a reason that is about inputs, never about importance:
@@ -1905,9 +1934,12 @@ def rail_census(action: str, symbol: str, qty: int, price: float,
 
         scfg = r.get("sector_concentration") or {}
         if scfg.get("enabled"):
-            cap = scfg.get("max_per_sector")
             sector = sector_of(cfg, symbol)
-            if cap and sector is not None:
+            out["sector_unmapped"] = sector is None
+            # Unmapped: the cap has no sector to look up, so it was never
+            # asked — None, not False (see the docstring).
+            cap = sector_cap(scfg, sector) if sector is not None else None
+            if cap:
                 out["sector_concentration"] = (
                     sector_open_count(cfg, symbol, positions) >= cap)
 

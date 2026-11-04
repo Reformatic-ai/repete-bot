@@ -487,6 +487,36 @@ def run(cfg: dict) -> list[str]:
             fails.append(f"risk.sector_concentration.max_per_sector must be an "
                          f"int >= 1 ({cap!r}) — 0 or less blocks every entry "
                          f"in a mapped sector")
+        # Per-sector overrides (2026-11-04, "Broad market" at 1). Each one is
+        # silent at runtime if wrong: a misspelt sector name matches no symbol
+        # and caps nothing, and a value above the global cap would LOOSEN a
+        # rail through a side door. So: a known sector, an int >= 1, and never
+        # above max_per_sector — an override may only tighten.
+        over = scfg.get("max_per_sector_overrides")
+        if over is not None:
+            if not isinstance(over, dict):
+                fails.append("risk.sector_concentration.max_per_sector_"
+                             "overrides must be a mapping of sector -> int")
+            else:
+                known = set(cfg.get("sectors") or {}) | set(
+                    cfg.get("core_sectors") or {})
+                for sector, v in over.items():
+                    if sector not in known:
+                        fails.append(
+                            f"risk.sector_concentration.max_per_sector_"
+                            f"overrides names {sector!r}, which is in neither "
+                            f"sectors: nor core_sectors: — it would cap "
+                            f"nothing")
+                    if isinstance(v, bool) or not isinstance(v, int) or v < 1:
+                        fails.append(
+                            f"risk.sector_concentration.max_per_sector_"
+                            f"overrides.{sector} must be an int >= 1 ({v!r})")
+                    elif (isinstance(cap, int) and not isinstance(cap, bool)
+                          and v > cap):
+                        fails.append(
+                            f"risk.sector_concentration.max_per_sector_"
+                            f"overrides.{sector} is {v}, above max_per_sector "
+                            f"{cap} — an override may only tighten the cap")
 
     ledger_path = cfg.get("memory", {}).get("ledger_path", "memory/ledger.jsonl")
     mem_dir = os.path.dirname(ledger_path) or "."

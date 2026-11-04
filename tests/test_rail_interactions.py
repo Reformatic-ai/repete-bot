@@ -310,12 +310,12 @@ def test_the_backtester_runs_under_FEWER_rails_than_live_and_the_gap_is_pinned()
     # `direction_conflict` and `sector_concentration` (2026-08-05, with the
     # `reclaim` leg) land in `pure_checks` for the same reason and with the same
     # consequence: the simulator inherits them, so the gap below is unchanged
-    # and no divergence entry is owed.
+    # and no divergence entry is owed. So does `sector_unmapped` (2026-11-04).
     assert _rails_in("pure_checks") == {
         "zero_qty", "order_value_cap", "drawdown", "max_open_positions",
         "strategy_slots", "position_cap", "regime_exposure", "desync_sell",
         "desync_cover", "net_exposure", "direction_conflict",
-        "sector_concentration"}
+        "sector_unmapped", "sector_concentration"}
     assert _rails_in("pre_trade_checks") == {"halt", "daily_cap", "heat",
                                              "correlation"}
 
